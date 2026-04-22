@@ -39,16 +39,68 @@ const defaultAuthState: PersistedAuthState = {
   userList: seedUsers,
 };
 
+const VALID_ROLES = new Set(Object.keys(ROLE_MODULES) as User["role"][]);
+const FALLBACK_ROLE: User["role"] = "Staff";
+const ALL_TEAMS: TeamId[] = ["dispatch", "recruitment", "sales", "clients", "projects", "payroll", "bookkeeping"];
+
+const unique = <T,>(items: T[]) => [...new Set(items)];
+
+const normalizeUser = (user: User): User => {
+  const role = VALID_ROLES.has(user.role) ? user.role : FALLBACK_ROLE;
+  const seedMatch = seedUsers.find((item) => item.id === user.id || item.email.toLowerCase() === user.email.toLowerCase());
+  const primaryTeam = ALL_TEAMS.includes(user.team) ? user.team : (seedMatch?.team ?? "projects");
+  const teamList = unique(
+    (user.teams?.filter((team): team is TeamId => ALL_TEAMS.includes(team)) ?? []).concat(primaryTeam)
+  );
+  const modulesSource = user.modules?.length ? user.modules : (seedMatch?.modules ?? ROLE_MODULES[role]);
+
+  return {
+    ...seedMatch,
+    ...user,
+    role,
+    team: primaryTeam,
+    teams: teamList,
+    modules: unique(modulesSource),
+    initials:
+      user.initials?.trim() ||
+      user.name
+        .trim()
+        .split(/\s+/)
+        .map((part) => part[0])
+        .slice(0, 2)
+        .join("")
+        .toUpperCase(),
+  };
+};
+
+const mergeUsers = (savedUsers: User[] | undefined): User[] => {
+  const normalizedSaved = (savedUsers ?? []).map(normalizeUser);
+  const byEmail = new Map(normalizedSaved.map((user) => [user.email.toLowerCase(), user]));
+
+  for (const seedUser of seedUsers) {
+    const key = seedUser.email.toLowerCase();
+    if (!byEmail.has(key)) {
+      byEmail.set(key, seedUser);
+      continue;
+    }
+    byEmail.set(key, normalizeUser({ ...seedUser, ...byEmail.get(key)! }));
+  }
+
+  return [...byEmail.values()];
+};
+
 const loadAuthState = (): PersistedAuthState => {
   if (typeof window === "undefined") return defaultAuthState;
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return defaultAuthState;
     const parsed = JSON.parse(raw) as Partial<PersistedAuthState>;
+    const mergedUsers = mergeUsers(parsed.userList);
+    const hasCurrent = mergedUsers.some((user) => user.id === parsed.currentUserId);
     return {
-      currentUserId: parsed.currentUserId ?? defaultAuthState.currentUserId,
+      currentUserId: hasCurrent ? parsed.currentUserId ?? defaultAuthState.currentUserId : defaultAuthState.currentUserId,
       passwords: { ...defaultPasswords, ...(parsed.passwords ?? {}) },
-      userList: parsed.userList?.length ? parsed.userList : defaultAuthState.userList,
+      userList: mergedUsers,
     };
   } catch {
     return defaultAuthState;
