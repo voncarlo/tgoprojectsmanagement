@@ -44,9 +44,15 @@ const sections: Section[] = [
     items: [
       { to: "/chat", icon: MessageSquare, label: "Chat", module: "chat" },
       { to: "/teams", icon: Users, label: "Teams", module: "teams" },
-      { to: "/notes", icon: NotebookPen, label: "Notes", module: "notes" },
       { to: "/documents", icon: FileText, label: "Documents", module: "documents" },
       { to: "/approvals", icon: GitBranch, label: "Approvals", module: "approvals" },
+    ],
+  },
+  {
+    key: "personal",
+    label: "Personal",
+    items: [
+      { to: "/notes", icon: NotebookPen, label: "Notes", module: "notes" },
     ],
   },
   {

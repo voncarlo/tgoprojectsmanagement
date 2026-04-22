@@ -25,7 +25,7 @@ const navItems = [
   { label: "Reports", path: "/reports", icon: BarChart3, group: "Workspace" },
   { label: "Documents", path: "/documents", icon: FileText, group: "Collaboration" },
   { label: "Chat", path: "/chat", icon: MessageSquare, group: "Collaboration" },
-  { label: "Notes", path: "/notes", icon: NotebookPen, group: "Collaboration" },
+  { label: "Notes", path: "/notes", icon: NotebookPen, group: "Personal" },
   { label: "Notifications", path: "/notifications", icon: Bell, group: "Workspace" },
   { label: "Activity Logs", path: "/activity", icon: Activity, group: "Workspace" },
   { label: "Approvals", path: "/approvals", icon: GitBranch, group: "Workspace" },

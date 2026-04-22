@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bell, Search, Plus, CheckCheck, Sun, Moon, Command as CommandIcon, Menu } from "lucide-react";
+import { Bell, Search, Plus, CheckCheck, Sun, Moon, Command as CommandIcon, Menu, MessageSquare } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -114,11 +114,11 @@ export const Topbar = () => {
           <Button
             variant="ghost"
             size="icon"
-            onClick={toggleTheme}
-            aria-label="Toggle theme"
-            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            onClick={() => navigate("/chat")}
+            aria-label="Open chat"
+            title="Open chat"
           >
-            {theme === "dark" ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
+            <MessageSquare className="h-[18px] w-[18px]" />
           </Button>
 
           <DropdownMenu>
@@ -186,6 +186,10 @@ export const Topbar = () => {
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => navigate("/settings")}>Profile</DropdownMenuItem>
               <DropdownMenuItem onClick={() => navigate("/settings")}>Preferences</DropdownMenuItem>
+              <DropdownMenuItem onClick={toggleTheme}>
+                {theme === "dark" ? <Sun className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}
+                {theme === "dark" ? "Light mode" : "Dark mode"}
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => { signOut(); navigate("/login"); }}>Sign out</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
