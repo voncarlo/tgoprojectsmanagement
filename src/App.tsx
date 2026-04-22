@@ -25,6 +25,8 @@ import Approvals from "./pages/Approvals";
 import Automations from "./pages/Automations";
 import Admin from "./pages/Admin";
 import RecycleBin from "./pages/RecycleBin";
+import Chat from "./pages/Chat";
+import Notes from "./pages/Notes";
 import Dispatch from "./pages/departments/Dispatch";
 import Recruitment from "./pages/departments/Recruitment";
 import Sales from "./pages/departments/Sales";
@@ -55,6 +57,8 @@ const App = () => (
               <Route path="/reports" element={<Reports />} />
               <Route path="/documents" element={<Documents />} />
               <Route path="/notifications" element={<Notifications />} />
+              <Route path="/chat" element={<Chat />} />
+              <Route path="/notes" element={<Notes />} />
               <Route path="/activity" element={<ActivityLogs />} />
               <Route path="/approvals" element={<Approvals />} />
               <Route path="/automations" element={<Automations />} />

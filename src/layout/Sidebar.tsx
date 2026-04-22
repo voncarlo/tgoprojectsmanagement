@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, CheckSquare, FolderKanban, BarChart3, Users, Settings, LogOut, ShieldCheck,
   PanelLeftClose, PanelLeftOpen, CalendarDays, Activity, FileText, Bell, GitBranch, Workflow,
-  Truck, UserPlus, TrendingUp, Wallet, Calculator, Building2, ShieldAlert, BarChart4, ChevronDown, Trash2,
+  ShieldAlert, BarChart4, ChevronDown, Trash2, MessageSquare, NotebookPen,
 } from "lucide-react";
 import { Logo } from "@/components/portal/Logo";
 import { cn } from "@/lib/utils";
@@ -30,18 +30,6 @@ const sections: Section[] = [
     ],
   },
   {
-    key: "operations",
-    label: "Operations",
-    items: [
-      { to: "/dispatch", icon: Truck, label: "Dispatch Operations", module: "dispatch" },
-      { to: "/recruitment", icon: UserPlus, label: "Recruitment", module: "recruitment" },
-      { to: "/sales", icon: TrendingUp, label: "Sales", module: "sales" },
-      { to: "/payroll", icon: Wallet, label: "Payroll", module: "payroll" },
-      { to: "/bookkeeping", icon: Calculator, label: "Bookkeeping", module: "bookkeeping" },
-      { to: "/clients", icon: Building2, label: "Clients", module: "clients" },
-    ],
-  },
-  {
     key: "analytics",
     label: "Analytics",
     items: [
@@ -54,7 +42,9 @@ const sections: Section[] = [
     key: "collaboration",
     label: "Collaboration",
     items: [
+      { to: "/chat", icon: MessageSquare, label: "Chat", module: "chat" },
       { to: "/teams", icon: Users, label: "Teams", module: "teams" },
+      { to: "/notes", icon: NotebookPen, label: "Notes", module: "notes" },
       { to: "/documents", icon: FileText, label: "Documents", module: "documents" },
       { to: "/approvals", icon: GitBranch, label: "Approvals", module: "approvals" },
     ],

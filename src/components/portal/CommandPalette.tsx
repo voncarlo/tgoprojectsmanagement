@@ -5,8 +5,7 @@ import {
 } from "@/components/ui/command";
 import {
   LayoutDashboard, CheckSquare, FolderKanban, CalendarDays, BarChart4, BarChart3,
-  FileText, Bell, Activity, GitBranch, Workflow, Truck, UserPlus, TrendingUp, Wallet,
-  Calculator, Building2, Users, ShieldCheck, ShieldAlert, Settings, Plus, Search,
+  FileText, Bell, Activity, GitBranch, Workflow, Users, ShieldCheck, ShieldAlert, Settings, Plus, Search, MessageSquare, NotebookPen,
 } from "lucide-react";
 import { useData } from "@/store/DataContext";
 import { useAuth } from "@/auth/AuthContext";
@@ -24,17 +23,13 @@ const navItems = [
   { label: "Calendar", path: "/calendar", icon: CalendarDays, group: "Workspace" },
   { label: "Workload", path: "/workload", icon: BarChart4, group: "Workspace" },
   { label: "Reports", path: "/reports", icon: BarChart3, group: "Workspace" },
-  { label: "Documents", path: "/documents", icon: FileText, group: "Operations" },
-  { label: "Notifications", path: "/notifications", icon: Bell, group: "Operations" },
-  { label: "Activity Logs", path: "/activity", icon: Activity, group: "Operations" },
-  { label: "Approvals", path: "/approvals", icon: GitBranch, group: "Operations" },
-  { label: "Automations", path: "/automations", icon: Workflow, group: "Operations" },
-  { label: "Dispatch", path: "/dispatch", icon: Truck, group: "Departments" },
-  { label: "Recruitment", path: "/recruitment", icon: UserPlus, group: "Departments" },
-  { label: "Sales", path: "/sales", icon: TrendingUp, group: "Departments" },
-  { label: "Payroll", path: "/payroll", icon: Wallet, group: "Departments" },
-  { label: "Bookkeeping", path: "/bookkeeping", icon: Calculator, group: "Departments" },
-  { label: "Clients", path: "/clients", icon: Building2, group: "Departments" },
+  { label: "Documents", path: "/documents", icon: FileText, group: "Collaboration" },
+  { label: "Chat", path: "/chat", icon: MessageSquare, group: "Collaboration" },
+  { label: "Notes", path: "/notes", icon: NotebookPen, group: "Collaboration" },
+  { label: "Notifications", path: "/notifications", icon: Bell, group: "Workspace" },
+  { label: "Activity Logs", path: "/activity", icon: Activity, group: "Workspace" },
+  { label: "Approvals", path: "/approvals", icon: GitBranch, group: "Workspace" },
+  { label: "Automations", path: "/automations", icon: Workflow, group: "Admin" },
   { label: "Teams", path: "/teams", icon: Users, group: "Admin" },
   { label: "User Management", path: "/users", icon: ShieldCheck, group: "Admin" },
   { label: "Admin Panel", path: "/admin", icon: ShieldAlert, group: "Admin" },

@@ -25,9 +25,31 @@ import { useAuth } from "@/auth/AuthContext";
 
 interface Notification extends Activity {
   read: boolean;
+  kind?: "activity" | "deadline";
 }
 
 type RecycleBinType = "task" | "document" | "project";
+
+export interface ChatMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  recipientId: string;
+  recipientName: string;
+  body: string;
+  createdAt: string;
+}
+
+export interface PersonalNote {
+  id: string;
+  userId: string;
+  title: string;
+  body: string;
+  taskTitle?: string;
+  completed: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface RecycleBinItem {
   id: string;
@@ -51,6 +73,8 @@ interface PersistedDataState {
   auditLog: AuditEntry[];
   calendarEvents: CalendarEvent[];
   recycleBin: RecycleBinItem[];
+  chats: ChatMessage[];
+  personalNotes: PersonalNote[];
 }
 
 interface DataCtx {
@@ -64,6 +88,8 @@ interface DataCtx {
   auditLog: AuditEntry[];
   calendarEvents: CalendarEvent[];
   recycleBin: RecycleBinItem[];
+  chats: ChatMessage[];
+  personalNotes: PersonalNote[];
   addTask: (t: Omit<Task, "id">) => Task;
   updateTask: (id: string, patch: Partial<Task>) => void;
   removeTask: (id: string) => void;
@@ -86,6 +112,10 @@ interface DataCtx {
   purgeRecycleItem: (id: string) => void;
   toggleAutomation: (id: string) => void;
   addCalendarEvent: (event: Omit<CalendarEvent, "id">) => CalendarEvent;
+  sendChatMessage: (recipientId: string, body: string) => void;
+  addPersonalNote: (note: Omit<PersonalNote, "id" | "userId" | "createdAt" | "updatedAt">) => void;
+  updatePersonalNote: (id: string, patch: Partial<PersonalNote>) => void;
+  removePersonalNote: (id: string) => void;
 }
 
 const STORAGE_KEY = "tgo.data";
@@ -105,6 +135,8 @@ const defaultState: PersistedDataState = {
   auditLog: seedAuditLog,
   calendarEvents: seedCalendarEvents,
   recycleBin: [],
+  chats: [],
+  personalNotes: [],
 };
 
 const loadState = (): PersistedDataState => {
@@ -123,10 +155,32 @@ const loadState = (): PersistedDataState => {
       auditLog: parsed.auditLog?.length ? parsed.auditLog : defaultState.auditLog,
       calendarEvents: parsed.calendarEvents?.length ? parsed.calendarEvents : defaultState.calendarEvents,
       recycleBin: parsed.recycleBin ?? defaultState.recycleBin,
+      chats: parsed.chats ?? defaultState.chats,
+      personalNotes: parsed.personalNotes ?? defaultState.personalNotes,
     };
   } catch {
     return defaultState;
   }
+};
+
+const deadlineLabel = (isoDate: string) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(isoDate);
+  due.setHours(0, 0, 0, 0);
+  const diff = Math.round((due.getTime() - today.getTime()) / 86400000);
+  if (diff <= 0) return "today";
+  if (diff === 1) return "tomorrow";
+  return `in ${diff} days`;
+};
+
+const isUpcoming = (isoDate: string, windowDays = 3) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(isoDate);
+  due.setHours(0, 0, 0, 0);
+  const diff = Math.round((due.getTime() - today.getTime()) / 86400000);
+  return diff >= 0 && diff <= windowDays;
 };
 
 const recomputeProgress = (project: Project): Project => {
@@ -150,6 +204,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [auditLog, setAuditLog] = useState<AuditEntry[]>(initialState.auditLog);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>(initialState.calendarEvents);
   const [recycleBin, setRecycleBin] = useState<RecycleBinItem[]>(initialState.recycleBin);
+  const [chats, setChats] = useState<ChatMessage[]>(initialState.chats);
+  const [personalNotes, setPersonalNotes] = useState<PersonalNote[]>(initialState.personalNotes);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -165,9 +221,49 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         auditLog,
         calendarEvents,
         recycleBin,
+        chats,
+        personalNotes,
       } satisfies PersistedDataState)
     );
-  }, [tasks, projects, notifications, approvals, documents, automations, auditLog, calendarEvents, recycleBin]);
+  }, [tasks, projects, notifications, approvals, documents, automations, auditLog, calendarEvents, recycleBin, chats, personalNotes]);
+
+  useEffect(() => {
+    const notificationsEnabled = currentUser.notificationSettings?.enabled ?? true;
+    const deadlineNotificationsEnabled = currentUser.notificationSettings?.deadlines ?? true;
+
+    setNotifications((items) => {
+      const nonDeadline = items.filter((item) => item.kind !== "deadline");
+      if (!notificationsEnabled || !deadlineNotificationsEnabled) return nonDeadline;
+
+      const existing = new Map(items.filter((item) => item.kind === "deadline").map((item) => [item.id, item]));
+      const deadlineItems: Notification[] = [
+        ...tasks
+          .filter((task) => task.status !== "Completed" && task.status !== "Cancelled" && isUpcoming(task.due))
+          .map((task) => ({
+            id: `deadline-task-${task.id}`,
+            user: "System",
+            action: "deadline reminder",
+            target: `${task.title} is due ${deadlineLabel(task.due)}`,
+            time: "Deadline reminder",
+            read: existing.get(`deadline-task-${task.id}`)?.read ?? false,
+            kind: "deadline" as const,
+          })),
+        ...projects
+          .filter((project) => project.status !== "Completed" && project.status !== "Cancelled" && isUpcoming(project.end, 5))
+          .map((project) => ({
+            id: `deadline-project-${project.id}`,
+            user: "System",
+            action: "project reminder",
+            target: `${project.name} ends ${deadlineLabel(project.end)}`,
+            time: "Deadline reminder",
+            read: existing.get(`deadline-project-${project.id}`)?.read ?? false,
+            kind: "deadline" as const,
+          })),
+      ];
+
+      return [...deadlineItems, ...nonDeadline].slice(0, 60);
+    });
+  }, [currentUser.notificationSettings?.deadlines, currentUser.notificationSettings?.enabled, projects, tasks]);
 
   const appendAudit = useCallback((entry: Omit<AuditEntry, "id" | "time"> & { time?: string }) => {
     setAuditLog((items) => [
@@ -713,18 +809,73 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     [appendAudit, currentUser.name]
   );
 
+  const sendChatMessage: DataCtx["sendChatMessage"] = useCallback(
+    (recipientId, body) => {
+      const text = body.trim();
+      if (!text) return;
+      const recipient = auth.userList.find((user) => user.id === recipientId);
+      if (!recipient) return;
+      const message: ChatMessage = {
+        id: id("msg"),
+        senderId: currentUser.id,
+        senderName: currentUser.name,
+        recipientId: recipient.id,
+        recipientName: recipient.name,
+        body: text,
+        createdAt: new Date().toISOString(),
+      };
+      setChats((items) => [...items, message]);
+      pushActivity({ user: currentUser.name, action: "sent message to", target: recipient.name });
+    },
+    [auth.userList, currentUser.id, currentUser.name, pushActivity]
+  );
+
+  const addPersonalNote: DataCtx["addPersonalNote"] = useCallback(
+    (note) => {
+      const now = new Date().toISOString();
+      const next: PersonalNote = {
+        id: id("note"),
+        userId: currentUser.id,
+        title: note.title,
+        body: note.body,
+        taskTitle: note.taskTitle,
+        completed: note.completed,
+        createdAt: now,
+        updatedAt: now,
+      };
+      setPersonalNotes((items) => [next, ...items]);
+    },
+    [currentUser.id]
+  );
+
+  const updatePersonalNote: DataCtx["updatePersonalNote"] = useCallback((noteId, patch) => {
+    setPersonalNotes((items) =>
+      items.map((note) =>
+        note.id === noteId ? { ...note, ...patch, updatedAt: new Date().toISOString() } : note
+      )
+    );
+  }, []);
+
+  const removePersonalNote: DataCtx["removePersonalNote"] = useCallback((noteId) => {
+    setPersonalNotes((items) => items.filter((note) => note.id !== noteId));
+  }, []);
+
+  const notificationsForUser = currentUser.notificationSettings?.enabled === false ? [] : notifications;
+
   const value = useMemo<DataCtx>(
     () => ({
       tasks,
       projects,
-      notifications,
-      unreadCount: notifications.filter((notification) => !notification.read).length,
+      notifications: notificationsForUser,
+      unreadCount: notificationsForUser.filter((notification) => !notification.read).length,
       approvals,
       documents,
       automations,
       auditLog,
       calendarEvents,
       recycleBin,
+      chats,
+      personalNotes,
       addTask,
       updateTask,
       removeTask,
@@ -743,17 +894,23 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       purgeRecycleItem,
       toggleAutomation,
       addCalendarEvent,
+      sendChatMessage,
+      addPersonalNote,
+      updatePersonalNote,
+      removePersonalNote,
     }),
     [
       tasks,
       projects,
-      notifications,
+      notificationsForUser,
       approvals,
       documents,
       automations,
       auditLog,
       calendarEvents,
       recycleBin,
+      chats,
+      personalNotes,
       addTask,
       updateTask,
       removeTask,
@@ -772,6 +929,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       purgeRecycleItem,
       toggleAutomation,
       addCalendarEvent,
+      sendChatMessage,
+      addPersonalNote,
+      updatePersonalNote,
+      removePersonalNote,
     ]
   );
 

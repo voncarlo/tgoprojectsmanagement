@@ -58,10 +58,11 @@ const dueLabel = (d: string) => {
 const initials = (name: string) => name.split(" ").map((n) => n[0]).join("").slice(0, 2);
 
 const Tasks = () => {
-  const { visibleTeams, isAdmin, currentUser } = useAuth();
+  const { visibleTeams, currentUser, can } = useAuth();
   const { tasks, updateTask, removeTask, addTask, decideTaskApproval, addTaskApprovalComment } = useData();
   const { isManager } = useAuth();
   const teamsVisible = teams.filter((t) => visibleTeams.includes(t.id));
+  const canDeleteTask = can("task.delete");
 
   const [q, setQ] = useState("");
   const [activeTeams, setActiveTeams] = useState<string[]>([]);
@@ -165,7 +166,7 @@ const Tasks = () => {
 
         <div className="flex items-center gap-1 rounded-lg bg-muted/50 p-1">
           {([
-            { k: "all", label: isAdmin ? "All" : "My teams" },
+            { k: "all", label: "All" },
             { k: "mine", label: "Assigned to me" },
             { k: "overdue", label: "Overdue" },
           ] as const).map((s) => (
@@ -419,6 +420,7 @@ const Tasks = () => {
           {open && (() => {
             const team = teams.find((x) => x.id === open.team)!;
             const overdue = isOverdue(open);
+            const canEditTask = can("task.edit.any") || open.assignee === currentUser.name;
             return (
               <div className="space-y-5">
                 <SheetHeader className="text-left space-y-2">
@@ -464,9 +466,11 @@ const Tasks = () => {
                     {STATUSES.map((s) => (
                       <button
                         key={s}
+                        disabled={!canEditTask}
                         onClick={() => { updateTask(open.id, { status: s }); setOpen({ ...open, status: s }); }}
                         className={cn("h-9 rounded-lg text-xs font-medium border flex items-center justify-center gap-1.5 transition-smooth",
-                          open.status === s ? "border-primary bg-primary/5 text-foreground" : "border-border text-muted-foreground hover:border-border hover:bg-muted/50")}
+                          open.status === s ? "border-primary bg-primary/5 text-foreground" : "border-border text-muted-foreground hover:border-border hover:bg-muted/50",
+                          !canEditTask && "opacity-50 cursor-not-allowed")}
                       >
                         <span className={cn("h-1.5 w-1.5 rounded-full", statusDot[s])} />
                         {s}
@@ -481,9 +485,11 @@ const Tasks = () => {
                     {PRIORITIES.map((p) => (
                       <button
                         key={p}
+                        disabled={!canEditTask}
                         onClick={() => { updateTask(open.id, { priority: p }); setOpen({ ...open, priority: p }); }}
                         className={cn("flex-1 h-8 rounded-md text-[11px] font-medium border transition-smooth",
-                          open.priority === p ? cn(priorityColor[p], "shadow-soft") : "border-border text-muted-foreground hover:bg-muted")}
+                          open.priority === p ? cn(priorityColor[p], "shadow-soft") : "border-border text-muted-foreground hover:bg-muted",
+                          !canEditTask && "opacity-50 cursor-not-allowed")}
                       >
                         {p}
                       </button>
@@ -534,15 +540,17 @@ const Tasks = () => {
                 </div>
 
                 <div className="flex justify-between pt-2 border-t border-border">
-                  <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => {
-                    const confirmed = window.confirm(`Delete "${open.title}"? This cannot be undone.`);
-                    if (!confirmed) return;
-                    removeTask(open.id);
-                    toast.success("Task deleted");
-                    setOpen(null);
-                  }}>
-                    <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete
-                  </Button>
+                  {canDeleteTask ? (
+                    <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => {
+                      const confirmed = window.confirm(`Delete "${open.title}"? This cannot be undone.`);
+                      if (!confirmed) return;
+                      removeTask(open.id);
+                      toast.success("Task deleted");
+                      setOpen(null);
+                    }}>
+                      <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete
+                    </Button>
+                  ) : <div />}
                   <Button size="sm" variant="outline" onClick={() => setOpen(null)}>Close</Button>
                 </div>
               </div>

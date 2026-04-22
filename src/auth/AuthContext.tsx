@@ -1,10 +1,11 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { users as seedUsers, type User, type ModuleKey, type TeamId } from "@/data/mock";
+import { users as seedUsers, type User, type ModuleKey, type TeamId, type NotificationSettings } from "@/data/mock";
 import { ROLE_CAPABILITIES, ROLE_MODULES, ADMIN_ONLY_MODULES, type Capability } from "./permissions";
 
 interface AuthCtx {
   currentUser: User;
   setCurrentUser: (u: User) => void;
+  updateCurrentUser: (patch: Partial<User>) => void;
   userList: User[];
   setUserList: (u: User[]) => void;
   isSuperAdmin: boolean;
@@ -30,7 +31,14 @@ interface PersistedAuthState {
 }
 
 const STORAGE_KEY = "tgo.auth";
-const STORAGE_VERSION = 4;
+const STORAGE_VERSION = 5;
+const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
+  enabled: true,
+  digest: true,
+  mentions: true,
+  projects: true,
+  deadlines: true,
+};
 
 const defaultPasswords = seedUsers.reduce<Record<string, string>>((acc, user) => {
   acc[user.id] = user.email.toLowerCase() === "von.asinas@tgocorp.com" ? "Von@4213" : "";
@@ -65,6 +73,11 @@ const normalizeUser = (user: User): User => {
     team: primaryTeam,
     teams: teamList,
     modules: unique([...modulesSource, ...ROLE_MODULES[role]]),
+    notificationSettings: {
+      ...DEFAULT_NOTIFICATION_SETTINGS,
+      ...(seedMatch?.notificationSettings ?? {}),
+      ...(user.notificationSettings ?? {}),
+    },
     initials:
       user.initials?.trim() ||
       user.name
@@ -166,8 +179,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       currentUser,
       setCurrentUser: (user) => {
         const existing = userList.some((item) => item.id === user.id);
-        if (!existing) setUserList((prev) => [...prev, user]);
+        const normalized = normalizeUser(user);
+        setUserList((prev) =>
+          existing ? prev.map((item) => (item.id === normalized.id ? normalized : item)) : [...prev, normalized]
+        );
         setCurrentUserId(user.id);
+      },
+      updateCurrentUser: (patch) => {
+        const next = normalizeUser({ ...currentUser, ...patch });
+        setUserList((prev) => prev.map((item) => (item.id === currentUser.id ? next : item)));
       },
       userList,
       setUserList,
@@ -181,10 +201,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (ADMIN_ONLY_MODULES.includes(module) && !isAdmin) return false;
         return userModules.includes(module);
       },
-      canSeeTeam: (teamId) => isAdmin || currentUser.teams.includes(teamId),
-      visibleTeams: isAdmin
-        ? (["dispatch", "recruitment", "sales", "clients", "projects", "payroll", "bookkeeping"] as TeamId[])
-        : currentUser.teams,
+      canSeeTeam: () => true,
+      visibleTeams: ["dispatch", "recruitment", "sales", "clients", "projects", "payroll", "bookkeeping"] as TeamId[],
       signIn: (email, password) => {
         const account = userList.find((user) => user.email.toLowerCase() === email.trim().toLowerCase());
         if (!account) return { ok: false, message: "No account found for that email." };
@@ -243,6 +261,7 @@ export const useAuth = (): AuthCtx => {
   return {
     currentUser: anon,
     setCurrentUser: () => {},
+    updateCurrentUser: () => {},
     userList: [],
     setUserList: () => {},
     isSuperAdmin: false,

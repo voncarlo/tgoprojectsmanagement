@@ -37,7 +37,7 @@ const Projects = () => {
       <Card className="p-3 flex flex-wrap items-center gap-2">
         <Button size="sm" variant={filter === "all" ? "default" : "ghost"} onClick={() => setFilter("all")} className={cn("gap-1.5", filter === "all" && "gradient-primary text-primary-foreground")}>
           <TeamIcon team="all" size={14} className={cn(filter === "all" ? "text-primary-foreground" : "text-muted-foreground")} />
-          {isAdmin ? "All teams" : "My teams"}
+          All teams
         </Button>
         {teamsVisible.map((t) => (
           <Button key={t.id} size="sm" variant={filter === t.id ? "default" : "ghost"} onClick={() => setFilter(t.id)} className={cn("gap-1.5", filter === t.id && "gradient-primary text-primary-foreground")}>

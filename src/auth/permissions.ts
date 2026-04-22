@@ -61,11 +61,11 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
   ],
   Manager: [
     "users.view", "audit.view",
-    "task.create", "task.edit.assigned", "task.assign",
-    "project.create", "project.edit.team",
+    "task.create", "task.edit.any", "task.edit.assigned", "task.delete", "task.assign",
+    "project.create", "project.edit.any", "project.edit.team", "project.delete",
     "approval.view", "approval.decide",
     "report.view", "report.export",
-    "document.upload",
+    "document.upload", "document.delete",
     "data.export",
   ],
   Staff: [
@@ -79,24 +79,24 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
 export const ROLE_MODULES: Record<Role, ModuleKey[]> = {
   "Super Admin": [
     "dashboard","tasks","projects","calendar","workload","reports",
-    "documents","notifications","activity","approvals","automations",
+    "documents","notifications","activity","approvals","automations","chat","notes",
     "dispatch","recruitment","sales","payroll","bookkeeping","clients",
     "teams","users","recycle","admin","settings",
   ],
   Admin: [
     "dashboard","tasks","projects","calendar","workload","reports",
-    "documents","notifications","activity","approvals","automations",
+    "documents","notifications","activity","approvals","automations","chat","notes",
     "dispatch","recruitment","sales","payroll","bookkeeping","clients",
     "teams","users","recycle","admin","settings",
   ],
   Manager: [
     "dashboard","tasks","projects","calendar","workload","reports",
-    "documents","notifications","activity","approvals",
+    "documents","notifications","activity","approvals","chat","notes",
     "teams","settings",
   ],
   Staff: [
     "dashboard","tasks","projects","calendar","reports","activity",
-    "documents","notifications",
+    "documents","notifications","chat","notes",
     "settings",
   ],
 };

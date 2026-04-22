@@ -20,6 +20,8 @@ export type ModuleKey =
   | "activity"
   | "approvals"
   | "automations"
+  | "chat"
+  | "notes"
   | "dispatch"
   | "recruitment"
   | "sales"
@@ -83,6 +85,16 @@ export interface User {
   status: AccountStatus;
   initials: string;
   lastActive?: string;
+  avatarUrl?: string;
+  notificationSettings?: NotificationSettings;
+}
+
+export interface NotificationSettings {
+  enabled: boolean;
+  digest: boolean;
+  mentions: boolean;
+  projects: boolean;
+  deadlines: boolean;
 }
 
 export interface Task {
@@ -135,7 +147,7 @@ export const teams: Team[] = [
 
 const ALL_MODULES: ModuleKey[] = [
   "dashboard","tasks","projects","calendar","workload","reports",
-  "documents","notifications","activity","approvals","automations",
+  "documents","notifications","activity","approvals","automations","chat","notes",
   "dispatch","recruitment","sales","payroll","bookkeeping","clients",
   "teams","users","recycle","admin","settings",
 ];
@@ -146,7 +158,25 @@ const STAFF_MODULES: ModuleKey[] = [
 ];
 
 export const users: User[] = [
-  { id: "u1", name: "Von Carlo Asinas", email: "von.asinas@tgocorp.com", role: "Super Admin", team: "projects", teams: ["dispatch","recruitment","sales","clients","projects","payroll","bookkeeping"], modules: ALL_MODULES, status: "Active", initials: "VA", lastActive: "Just now" },
+  {
+    id: "u1",
+    name: "Von Carlo Asinas",
+    email: "von.asinas@tgocorp.com",
+    role: "Super Admin",
+    team: "projects",
+    teams: ["dispatch","recruitment","sales","clients","projects","payroll","bookkeeping"],
+    modules: ALL_MODULES,
+    status: "Active",
+    initials: "VA",
+    lastActive: "Just now",
+    notificationSettings: {
+      enabled: true,
+      digest: true,
+      mentions: true,
+      projects: true,
+      deadlines: true,
+    },
+  },
 ];
 
 export const projects: Project[] = [

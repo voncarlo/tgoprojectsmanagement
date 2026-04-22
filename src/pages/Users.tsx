@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -23,8 +23,11 @@ const ALL_MODULES: { id: ModuleKey; label: string }[] = [
   { id: "tasks", label: "Tasks" },
   { id: "projects", label: "Projects" },
   { id: "reports", label: "Reports" },
+  { id: "chat", label: "Chat" },
+  { id: "notes", label: "Notes" },
   { id: "teams", label: "Teams" },
   { id: "users", label: "User Management" },
+  { id: "recycle", label: "Recycle Bin" },
   { id: "settings", label: "Settings" },
 ];
 
@@ -37,7 +40,7 @@ const emptyUser = (): User => ({
   role: "Staff",
   team: "dispatch",
   teams: [],
-  modules: ["dashboard", "tasks", "projects", "teams"],
+  modules: [...ROLE_MODULES.Staff],
   status: "Active",
   initials: "··",
   lastActive: "Never",
@@ -169,7 +172,10 @@ const Users = () => {
                 <tr key={u.id} className="border-t border-border hover:bg-muted/30 transition-smooth">
                   <td className="p-3">
                     <div className="flex items-center gap-3">
-                      <Avatar className="h-9 w-9"><AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">{u.initials}</AvatarFallback></Avatar>
+                      <Avatar className="h-9 w-9">
+                        <AvatarImage src={u.avatarUrl} alt={u.name} />
+                        <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">{u.initials}</AvatarFallback>
+                      </Avatar>
                       <div>
                         <div className="text-sm font-medium flex items-center gap-1.5">
                           {u.name}

@@ -8,10 +8,13 @@ import { PageHeader } from "@/components/portal/PageHeader";
 import { EmptyState } from "@/components/portal/EmptyState";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { useAuth } from "@/auth/AuthContext";
 
 const Notifications = () => {
+  const { currentUser } = useAuth();
   const { notifications, markAllRead } = useData();
   const [filter, setFilter] = useState<"all" | "unread" | "read">("all");
+  const notificationsEnabled = currentUser.notificationSettings?.enabled !== false;
 
   const list = useMemo(() => notifications.filter((n) =>
     filter === "all" ? true : filter === "unread" ? !n.read : n.read
@@ -37,6 +40,12 @@ const Notifications = () => {
             filter === k ? "bg-background text-foreground shadow-soft" : "text-muted-foreground hover:text-foreground")}>{label}</button>
         ))}
       </div>
+
+      {!notificationsEnabled && (
+        <Card className="p-4 text-sm text-muted-foreground">
+          Notifications are turned off for this account. You can turn them back on in Settings.
+        </Card>
+      )}
 
       {list.length === 0 ? (
         <EmptyState icon={BellOff} title="You're all caught up" description="New notifications will appear here." />

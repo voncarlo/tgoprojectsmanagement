@@ -12,6 +12,8 @@ const ROUTE_TO_MODULE: Record<string, { module: ModuleKey; label: string }> = {
   "/reports":       { module: "reports",       label: "Reports" },
   "/documents":     { module: "documents",     label: "Documents" },
   "/notifications": { module: "notifications", label: "Notifications" },
+  "/chat":          { module: "chat",          label: "Chat" },
+  "/notes":         { module: "notes",         label: "Notes" },
   "/activity":      { module: "activity",      label: "Activity Logs" },
   "/approvals":     { module: "approvals",     label: "Approvals" },
   "/automations":   { module: "automations",   label: "Automations" },

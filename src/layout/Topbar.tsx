@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Bell, Search, Plus, CheckCheck, Sun, Moon, Command as CommandIcon, Menu } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,6 +30,8 @@ const titles: Record<string, { title: string; subtitle: string }> = {
   "/reports": { title: "Reports", subtitle: "Performance and productivity insights." },
   "/documents": { title: "Documents", subtitle: "Files, SOPs, contracts and templates." },
   "/notifications": { title: "Notifications", subtitle: "Mentions, assignments and approval requests." },
+  "/chat": { title: "Team Chat", subtitle: "Message teammates without leaving the portal." },
+  "/notes": { title: "Notes", subtitle: "Your personal workspace for reminders, plans, and task notes." },
   "/activity": { title: "Activity Logs", subtitle: "Audit trail across users, files and projects." },
   "/approvals": { title: "Approvals", subtitle: "Multi-step approval workflows." },
   "/automations": { title: "Automations", subtitle: "Trigger-based workflows and scheduled rules." },
@@ -169,6 +171,7 @@ export const Topbar = () => {
             <DropdownMenuTrigger asChild>
               <button className="flex items-center gap-2 rounded-full p-1 hover:bg-muted transition-smooth">
                 <Avatar className="h-8 w-8">
+                  <AvatarImage src={currentUser.avatarUrl} alt={currentUser.name} />
                   <AvatarFallback className="bg-primary text-primary-foreground text-xs font-semibold">{currentUser.initials}</AvatarFallback>
                 </Avatar>
               </button>

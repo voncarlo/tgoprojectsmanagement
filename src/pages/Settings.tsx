@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { teams, type ModuleKey, type Role } from "@/data/mock";
 import { useAuth } from "@/auth/AuthContext";
@@ -28,23 +28,28 @@ const MODULES: { id: ModuleKey; label: string }[] = [
   { id: "tasks", label: "Tasks" },
   { id: "projects", label: "Projects" },
   { id: "reports", label: "Reports" },
+  { id: "chat", label: "Chat" },
+  { id: "notes", label: "Notes" },
   { id: "teams", label: "Teams" },
   { id: "users", label: "User Management" },
+  { id: "recycle", label: "Recycle Bin" },
   { id: "settings", label: "Settings" },
 ];
 
 const ROLE_DEFAULTS: Record<Role, ModuleKey[]> = {
-  "Super Admin": ["dashboard", "tasks", "projects", "reports", "teams", "users", "settings"],
-  "Admin":       ["dashboard", "tasks", "projects", "reports", "teams", "users", "settings"],
-  "Manager":     ["dashboard", "tasks", "projects", "reports", "teams"],
-  "Staff":       ["dashboard", "tasks", "projects", "teams"],
+  "Super Admin": ["dashboard", "tasks", "projects", "reports", "chat", "notes", "teams", "users", "recycle", "settings"],
+  "Admin":       ["dashboard", "tasks", "projects", "reports", "chat", "notes", "teams", "users", "recycle", "settings"],
+  "Manager":     ["dashboard", "tasks", "projects", "reports", "chat", "notes", "teams"],
+  "Staff":       ["dashboard", "tasks", "projects", "chat", "notes", "teams"],
 };
 
 const Settings = () => {
-  const { currentUser, setCurrentUser, isAdmin, isSuperAdmin, userList, setUserList, updatePassword: savePassword } = useAuth();
+  const { currentUser, updateCurrentUser, isAdmin, isSuperAdmin, userList, updatePassword: savePassword } = useAuth();
 
   const [name, setName] = useState(currentUser.name);
   const [email, setEmail] = useState(currentUser.email);
+  const [avatarUrl, setAvatarUrl] = useState(currentUser.avatarUrl ?? "");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [permMatrix, setPermMatrix] = useState<Record<Role, Record<ModuleKey, boolean>>>(() => {
     const obj = {} as Record<Role, Record<ModuleKey, boolean>>;
@@ -59,7 +64,7 @@ const Settings = () => {
     () => Object.fromEntries(teams.map((t) => [t.id, true]))
   );
 
-  const [notif, setNotif] = useState({ digest: true, mentions: true, projects: true, deadlines: false });
+  const [notif, setNotif] = useState(currentUser.notificationSettings ?? { enabled: true, digest: true, mentions: true, projects: true, deadlines: true });
   const [twoFA, setTwoFA] = useState(false);
   const [compact, setCompact] = useState(false);
   const [weekly, setWeekly] = useState(true);
@@ -69,10 +74,28 @@ const Settings = () => {
 
   const saveProfile = () => {
     if (!name.trim() || !email.trim()) return toast.error("Name and email are required");
-    const updated = { ...currentUser, name: name.trim(), email: email.trim(), initials: name.trim().split(/\s+/).map((n) => n[0]).slice(0, 2).join("").toUpperCase() };
-    setCurrentUser(updated);
-    setUserList(userList.map((u) => (u.id === currentUser.id ? updated : u)));
+    updateCurrentUser({
+      name: name.trim(),
+      email: email.trim(),
+      avatarUrl: avatarUrl || undefined,
+      initials: name.trim().split(/\s+/).map((n) => n[0]).slice(0, 2).join("").toUpperCase(),
+      notificationSettings: notif,
+    });
     toast.success("Profile saved");
+  };
+
+  const onAvatarSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) return toast.error("Please choose an image file.");
+    const reader = new FileReader();
+    reader.onload = () => {
+      const nextUrl = typeof reader.result === "string" ? reader.result : "";
+      if (!nextUrl) return toast.error("Could not read that image.");
+      setAvatarUrl(nextUrl);
+      toast.success("Profile picture updated");
+    };
+    reader.readAsDataURL(file);
   };
 
   const updatePassword = () => {
@@ -89,9 +112,16 @@ const Settings = () => {
       <div className="lg:col-span-2 space-y-5">
         <Section title="Profile" desc="Update your account details and contact info.">
           <div className="flex items-center gap-4 mb-5">
-            <Avatar className="h-16 w-16"><AvatarFallback className="bg-primary text-primary-foreground text-lg font-semibold">{currentUser.initials}</AvatarFallback></Avatar>
+            <Avatar className="h-16 w-16">
+              <AvatarImage src={avatarUrl} alt={currentUser.name} />
+              <AvatarFallback className="bg-primary text-primary-foreground text-lg font-semibold">{currentUser.initials}</AvatarFallback>
+            </Avatar>
             <div>
-              <Button size="sm" variant="outline" onClick={() => toast("Avatar upload coming soon")}>Change avatar</Button>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()}>Change photo</Button>
+                <Button size="sm" variant="ghost" onClick={() => { setAvatarUrl(""); toast.success("Profile picture removed"); }}>Remove photo</Button>
+              </div>
+              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={onAvatarSelect} />
               <p className="text-xs text-muted-foreground mt-1">JPG or PNG, up to 2MB.</p>
             </div>
           </div>
@@ -176,10 +206,11 @@ const Settings = () => {
       <div className="space-y-5">
         <Section title="Notifications" desc="Choose what updates you receive.">
           {[
+            { k: "enabled", l: "Notifications", d: "Master switch for all in-app notifications" },
             { k: "digest", l: "Email digest", d: "Daily summary of activity" },
             { k: "mentions", l: "Mentions", d: "When someone @mentions you" },
             { k: "projects", l: "Project updates", d: "Status changes on your projects" },
-            { k: "deadlines", l: "Deadline reminders", d: "24h before any due date" },
+            { k: "deadlines", l: "Deadline reminders", d: "Upcoming task and project due dates" },
           ].map((n, i, arr) => (
             <div key={n.k}>
               <div className="flex items-center justify-between py-3">
@@ -190,7 +221,9 @@ const Settings = () => {
                 <Switch
                   checked={(notif as any)[n.k]}
                   onCheckedChange={(v) => {
-                    setNotif((s) => ({ ...s, [n.k]: v }));
+                    const next = { ...notif, [n.k]: v };
+                    setNotif(next);
+                    updateCurrentUser({ notificationSettings: next });
                     toast.success(`${n.l} ${v ? "enabled" : "disabled"}`);
                   }}
                 />

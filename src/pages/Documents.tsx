@@ -27,8 +27,9 @@ const CATEGORY_TONE: Record<DocumentFile["category"], string> = {
 const CATEGORIES: (DocumentFile["category"] | "All")[] = ["All", "SOP", "Report", "Template", "Contract", "Project"];
 
 const Documents = () => {
-  const { visibleTeams, currentUser } = useAuth();
+  const { visibleTeams, currentUser, can } = useAuth();
   const { documents, addDocument, removeDocument } = useData();
+  const canDeleteDocument = can("document.delete");
   const [q, setQ] = useState("");
   const [cat, setCat] = useState<typeof CATEGORIES[number]>("All");
   const [open, setOpen] = useState(false);
@@ -139,12 +140,14 @@ const Documents = () => {
                     <td className="p-3 text-xs text-muted-foreground">{doc.updated}</td>
                     <td className="p-3 text-right">
                       <Button variant="ghost" size="icon" className="h-7 w-7"><Download className="h-3.5 w-3.5" /></Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => {
-                        const confirmed = window.confirm(`Delete "${doc.name}"? This cannot be undone.`);
-                        if (!confirmed) return;
-                        removeDocument(doc.id);
-                        toast.success("Document removed");
-                      }}><Trash2 className="h-3.5 w-3.5" /></Button>
+                      {canDeleteDocument && (
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => {
+                          const confirmed = window.confirm(`Delete "${doc.name}"? This cannot be undone.`);
+                          if (!confirmed) return;
+                          removeDocument(doc.id);
+                          toast.success("Document removed");
+                        }}><Trash2 className="h-3.5 w-3.5" /></Button>
+                      )}
                     </td>
                   </tr>
                 );
