@@ -91,7 +91,7 @@ export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
   return (
     <>
       {selectedUser && (
-        <div className="fixed bottom-4 right-[360px] z-40 hidden w-[360px] overflow-hidden rounded-2xl border border-border bg-card shadow-[0_20px_50px_rgba(0,0,0,0.2)] md:flex md:flex-col">
+        <div className="fixed bottom-4 right-[348px] z-40 hidden w-[332px] overflow-hidden rounded-2xl border border-border bg-card shadow-[0_20px_50px_rgba(0,0,0,0.2)] md:flex md:flex-col">
           <div className="border-b border-border bg-muted/25 px-4 py-3">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3 min-w-0">
@@ -115,7 +115,7 @@ export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
             </div>
           </div>
 
-          <div className="flex-1 space-y-2 overflow-y-auto bg-background px-4 py-4 min-h-[390px] max-h-[390px]">
+          <div className="flex-1 space-y-2 overflow-y-auto bg-background px-4 py-4 min-h-[428px] max-h-[428px]">
             {thread.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
                 Start a new conversation with {selectedUser.name}.

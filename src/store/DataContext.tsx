@@ -26,6 +26,7 @@ import { useAuth } from "@/auth/AuthContext";
 interface Notification extends Activity {
   read: boolean;
   kind?: "activity" | "deadline";
+  recipientUserId?: string;
 }
 
 type RecycleBinType = "task" | "document" | "project";
@@ -101,6 +102,7 @@ interface DataCtx {
   removeProject: (id: string) => void;
   toggleMilestone: (projectId: string, name: string) => void;
   pushActivity: (a: Omit<Activity, "id" | "time">) => void;
+  pushNotification: (a: Omit<Activity, "id" | "time"> & { recipientUserId?: string; kind?: Notification["kind"] }) => void;
   markAllRead: () => void;
   decideTaskApproval: (
     taskId: string,
@@ -279,7 +281,23 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
   const pushActivity = useCallback(
     (activity: Omit<Activity, "id" | "time">) => {
-      setNotifications((items) => [{ ...activity, id: id("a"), time: nowLabel(), read: false }, ...items].slice(0, 30));
+      setNotifications((items) => [{ ...activity, id: id("a"), time: nowLabel(), read: false, kind: "activity" }, ...items].slice(0, 30));
+    },
+    []
+  );
+
+  const pushNotification = useCallback(
+    (activity: Omit<Activity, "id" | "time"> & { recipientUserId?: string; kind?: Notification["kind"] }) => {
+      setNotifications((items) => [
+        {
+          ...activity,
+          id: id("a"),
+          time: nowLabel(),
+          read: false,
+          kind: activity.kind ?? "activity",
+        },
+        ...items,
+      ].slice(0, 60));
     },
     []
   );
@@ -545,8 +563,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   );
 
   const markAllRead = useCallback(() => {
-    setNotifications((items) => items.map((item) => ({ ...item, read: true })));
-  }, []);
+    setNotifications((items) =>
+      items.map((item) =>
+        !item.recipientUserId || item.recipientUserId === currentUser.id ? { ...item, read: true } : item
+      )
+    );
+  }, [currentUser.id]);
 
   const decideTaskApproval: DataCtx["decideTaskApproval"] = useCallback(
     (taskId, decision, comment) => {
@@ -832,9 +854,14 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         createdAt: new Date().toISOString(),
       };
       setChats((items) => [...items, message]);
-      pushActivity({ user: currentUser.name, action: "sent message to", target: recipient.name });
+      pushNotification({
+        user: currentUser.name,
+        action: "sent you a message",
+        target: recipient.name,
+        recipientUserId: recipient.id,
+      });
     },
-    [auth.userList, currentUser.id, currentUser.name, pushActivity]
+    [auth.userList, currentUser.id, currentUser.name, pushNotification]
   );
 
   const updateChatMessage: DataCtx["updateChatMessage"] = useCallback(
@@ -889,7 +916,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     setPersonalNotes((items) => items.filter((note) => note.id !== noteId));
   }, []);
 
-  const notificationsForUser = currentUser.notificationSettings?.enabled === false ? [] : notifications;
+  const notificationsForUser =
+    currentUser.notificationSettings?.enabled === false
+      ? []
+      : notifications.filter((notification) => !notification.recipientUserId || notification.recipientUserId === currentUser.id);
 
   const value = useMemo<DataCtx>(
     () => ({
@@ -913,6 +943,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       removeProject,
       toggleMilestone,
       pushActivity,
+      pushNotification,
       markAllRead,
       decideTaskApproval,
       addTaskApprovalComment,
@@ -950,6 +981,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       removeProject,
       toggleMilestone,
       pushActivity,
+      pushNotification,
       markAllRead,
       decideTaskApproval,
       addTaskApprovalComment,
