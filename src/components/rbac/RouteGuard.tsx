@@ -23,6 +23,7 @@ const ROUTE_TO_MODULE: Record<string, { module: ModuleKey; label: string }> = {
   "/clients":       { module: "clients",       label: "Clients" },
   "/teams":         { module: "teams",         label: "Teams" },
   "/users":         { module: "users",         label: "User Management" },
+  "/recycle-bin":   { module: "recycle",       label: "Recycle Bin" },
   "/admin":         { module: "admin",         label: "Admin Panel" },
   "/settings":      { module: "settings",      label: "Settings" },
 };

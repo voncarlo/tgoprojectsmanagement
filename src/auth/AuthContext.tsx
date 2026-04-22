@@ -64,7 +64,7 @@ const normalizeUser = (user: User): User => {
     role,
     team: primaryTeam,
     teams: teamList,
-    modules: unique(modulesSource),
+    modules: unique([...modulesSource, ...ROLE_MODULES[role]]),
     initials:
       user.initials?.trim() ||
       user.name

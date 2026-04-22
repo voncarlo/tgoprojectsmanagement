@@ -28,6 +28,7 @@ export type ModuleKey =
   | "clients"
   | "teams"
   | "users"
+  | "recycle"
   | "admin"
   | "settings";
 export type Priority = "Low" | "Medium" | "High" | "Urgent" | "Critical";
@@ -136,7 +137,7 @@ const ALL_MODULES: ModuleKey[] = [
   "dashboard","tasks","projects","calendar","workload","reports",
   "documents","notifications","activity","approvals","automations",
   "dispatch","recruitment","sales","payroll","bookkeeping","clients",
-  "teams","users","admin","settings",
+  "teams","users","recycle","admin","settings",
 ];
 const STAFF_MODULES: ModuleKey[] = [
   "dashboard","tasks","projects","calendar","workload","reports",

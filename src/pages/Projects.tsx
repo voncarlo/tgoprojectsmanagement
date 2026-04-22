@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Plus, Calendar, CheckCircle2, Circle } from "lucide-react";
+import { Plus, Calendar, CheckCircle2, Circle, Trash2 } from "lucide-react";
 import { teams, projectStatusColor } from "@/data/mock";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/auth/AuthContext";
@@ -12,14 +12,16 @@ import { useData } from "@/store/DataContext";
 import { QuickAddDialog } from "@/components/portal/QuickAddDialog";
 import { PageHeader } from "@/components/portal/PageHeader";
 import { TeamIcon } from "@/components/portal/TeamIcon";
+import { toast } from "sonner";
 
 const Projects = () => {
-  const { visibleTeams, isAdmin } = useAuth();
-  const { projects, tasks, toggleMilestone } = useData();
+  const { visibleTeams, isAdmin, can } = useAuth();
+  const { projects, tasks, toggleMilestone, removeProject } = useData();
   const teamsVisible = teams.filter((t) => visibleTeams.includes(t.id));
   const [filter, setFilter] = useState<string>("all");
   const [open, setOpen] = useState(false);
   const list = projects.filter((p) => visibleTeams.includes(p.team) && (filter === "all" || p.team === filter));
+  const canDeleteProjects = can("project.delete");
 
   return (
     <div className="space-y-6">
@@ -56,7 +58,25 @@ const Projects = () => {
                   <TeamIcon team={team.id} size={11} className="text-muted-foreground" />
                   {team.name}
                 </Badge>
-                <Badge variant="outline" className={cn("text-[10px]", projectStatusColor[p.status])}>{p.status}</Badge>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className={cn("text-[10px]", projectStatusColor[p.status])}>{p.status}</Badge>
+                  {canDeleteProjects && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        const confirmed = window.confirm(`Delete "${p.name}"? You can restore it later from the Recycle Bin.`);
+                        if (!confirmed) return;
+                        removeProject(p.id);
+                        toast.success("Project moved to Recycle Bin");
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </div>
               </div>
               <h3 className="font-semibold text-base mb-1">{p.name}</h3>
               <p className="text-xs text-muted-foreground mb-4 line-clamp-2">{p.description}</p>

@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, CheckSquare, FolderKanban, BarChart3, Users, Settings, LogOut, ShieldCheck,
   PanelLeftClose, PanelLeftOpen, CalendarDays, Activity, FileText, Bell, GitBranch, Workflow,
-  Truck, UserPlus, TrendingUp, Wallet, Calculator, Building2, ShieldAlert, BarChart4, ChevronDown,
+  Truck, UserPlus, TrendingUp, Wallet, Calculator, Building2, ShieldAlert, BarChart4, ChevronDown, Trash2,
 } from "lucide-react";
 import { Logo } from "@/components/portal/Logo";
 import { cn } from "@/lib/utils";
@@ -65,6 +65,7 @@ const sections: Section[] = [
     items: [
       { to: "/automations", icon: Workflow, label: "Automations", module: "automations" },
       { to: "/users", icon: ShieldCheck, label: "User Management", module: "users", adminOnly: true },
+      { to: "/recycle-bin", icon: Trash2, label: "Recycle Bin", module: "recycle", adminOnly: true },
       { to: "/settings", icon: Settings, label: "Settings", module: "settings" },
       { to: "/admin", icon: ShieldAlert, label: "Admin Panel", module: "admin", adminOnly: true },
     ],

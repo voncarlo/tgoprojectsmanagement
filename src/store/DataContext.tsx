@@ -27,6 +27,20 @@ interface Notification extends Activity {
   read: boolean;
 }
 
+type RecycleBinType = "task" | "document" | "project";
+
+export interface RecycleBinItem {
+  id: string;
+  resourceId: string;
+  type: RecycleBinType;
+  title: string;
+  description: string;
+  team?: Task["team"] | Project["team"] | DocumentFile["team"];
+  deletedAt: string;
+  deletedBy: string;
+  payload: Task | Project | DocumentFile;
+}
+
 interface PersistedDataState {
   tasks: Task[];
   projects: Project[];
@@ -36,6 +50,7 @@ interface PersistedDataState {
   automations: AutomationRule[];
   auditLog: AuditEntry[];
   calendarEvents: CalendarEvent[];
+  recycleBin: RecycleBinItem[];
 }
 
 interface DataCtx {
@@ -48,11 +63,13 @@ interface DataCtx {
   automations: AutomationRule[];
   auditLog: AuditEntry[];
   calendarEvents: CalendarEvent[];
+  recycleBin: RecycleBinItem[];
   addTask: (t: Omit<Task, "id">) => Task;
   updateTask: (id: string, patch: Partial<Task>) => void;
   removeTask: (id: string) => void;
   addProject: (p: Omit<Project, "id" | "milestones"> & { milestones?: Milestone[] }) => Project;
   updateProject: (id: string, patch: Partial<Project>) => void;
+  removeProject: (id: string) => void;
   toggleMilestone: (projectId: string, name: string) => void;
   pushActivity: (a: Omit<Activity, "id" | "time">) => void;
   markAllRead: () => void;
@@ -65,6 +82,8 @@ interface DataCtx {
   decideApproval: (approvalId: string, status: ApprovalStatus, comment?: string) => void;
   addDocument: (doc: Omit<DocumentFile, "id" | "updated" | "version"> & { version?: string }) => DocumentFile;
   removeDocument: (id: string) => void;
+  restoreRecycleItem: (id: string) => void;
+  purgeRecycleItem: (id: string) => void;
   toggleAutomation: (id: string) => void;
   addCalendarEvent: (event: Omit<CalendarEvent, "id">) => CalendarEvent;
 }
@@ -85,6 +104,7 @@ const defaultState: PersistedDataState = {
   automations: seedAutomations,
   auditLog: seedAuditLog,
   calendarEvents: seedCalendarEvents,
+  recycleBin: [],
 };
 
 const loadState = (): PersistedDataState => {
@@ -102,6 +122,7 @@ const loadState = (): PersistedDataState => {
       automations: parsed.automations?.length ? parsed.automations : defaultState.automations,
       auditLog: parsed.auditLog?.length ? parsed.auditLog : defaultState.auditLog,
       calendarEvents: parsed.calendarEvents?.length ? parsed.calendarEvents : defaultState.calendarEvents,
+      recycleBin: parsed.recycleBin ?? defaultState.recycleBin,
     };
   } catch {
     return defaultState;
@@ -128,6 +149,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [automations, setAutomations] = useState<AutomationRule[]>(initialState.automations);
   const [auditLog, setAuditLog] = useState<AuditEntry[]>(initialState.auditLog);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>(initialState.calendarEvents);
+  const [recycleBin, setRecycleBin] = useState<RecycleBinItem[]>(initialState.recycleBin);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -142,9 +164,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         automations,
         auditLog,
         calendarEvents,
+        recycleBin,
       } satisfies PersistedDataState)
     );
-  }, [tasks, projects, notifications, approvals, documents, automations, auditLog, calendarEvents]);
+  }, [tasks, projects, notifications, approvals, documents, automations, auditLog, calendarEvents, recycleBin]);
 
   const appendAudit = useCallback((entry: Omit<AuditEntry, "id" | "time"> & { time?: string }) => {
     setAuditLog((items) => [
@@ -158,6 +181,21 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       setNotifications((items) => [{ ...activity, id: id("a"), time: nowLabel(), read: false }, ...items].slice(0, 30));
     },
     []
+  );
+
+  const addToRecycleBin = useCallback(
+    (item: Omit<RecycleBinItem, "id" | "deletedAt" | "deletedBy">) => {
+      setRecycleBin((items) => [
+        {
+          ...item,
+          id: id("rb"),
+          deletedAt: new Date().toISOString(),
+          deletedBy: currentUser.name,
+        },
+        ...items,
+      ]);
+    },
+    [currentUser.name]
   );
 
   const addTask: DataCtx["addTask"] = useCallback(
@@ -277,6 +315,14 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       setTasks((items) => items.filter((task) => task.id !== taskId));
       setApprovals((items) => items.filter((approval) => approval.taskId !== taskId));
       if (!existing) return;
+      addToRecycleBin({
+        resourceId: existing.id,
+        type: "task",
+        title: existing.title,
+        description: `Task assigned to ${existing.assignee}`,
+        team: existing.team,
+        payload: existing,
+      });
       appendAudit({
         user: currentUser.name,
         action: "Deleted task",
@@ -284,8 +330,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         category: "Task",
         team: existing.team,
       });
+      pushActivity({ user: currentUser.name, action: "deleted task", target: existing.title });
     },
-    [appendAudit, currentUser.name, tasks]
+    [addToRecycleBin, appendAudit, currentUser.name, pushActivity, tasks]
   );
 
   const addProject: DataCtx["addProject"] = useCallback(
@@ -334,6 +381,31 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       });
     },
     [appendAudit, currentUser.name]
+  );
+
+  const removeProject: DataCtx["removeProject"] = useCallback(
+    (projectId) => {
+      const existing = projects.find((project) => project.id === projectId);
+      setProjects((items) => items.filter((project) => project.id !== projectId));
+      if (!existing) return;
+      addToRecycleBin({
+        resourceId: existing.id,
+        type: "project",
+        title: existing.name,
+        description: `Project owned by ${existing.owner}`,
+        team: existing.team,
+        payload: existing,
+      });
+      appendAudit({
+        user: currentUser.name,
+        action: "Deleted project",
+        target: existing.name,
+        category: "Project",
+        team: existing.team,
+      });
+      pushActivity({ user: currentUser.name, action: "deleted project", target: existing.name });
+    },
+    [addToRecycleBin, appendAudit, currentUser.name, projects, pushActivity]
   );
 
   const toggleMilestone: DataCtx["toggleMilestone"] = useCallback(
@@ -529,6 +601,14 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       const existing = documents.find((doc) => doc.id === docId);
       setDocuments((items) => items.filter((doc) => doc.id !== docId));
       if (!existing) return;
+      addToRecycleBin({
+        resourceId: existing.id,
+        type: "document",
+        title: existing.name,
+        description: `${existing.category} document`,
+        team: existing.team,
+        payload: existing,
+      });
       appendAudit({
         user: currentUser.name,
         action: "Deleted",
@@ -536,8 +616,64 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         category: "File",
         team: existing.team,
       });
+      pushActivity({ user: currentUser.name, action: "deleted document", target: existing.name });
     },
-    [appendAudit, currentUser.name, documents]
+    [addToRecycleBin, appendAudit, currentUser.name, documents, pushActivity]
+  );
+
+  const restoreRecycleItem: DataCtx["restoreRecycleItem"] = useCallback(
+    (recycleId) => {
+      const existing = recycleBin.find((item) => item.id === recycleId);
+      if (!existing) return;
+
+      if (existing.type === "task") {
+        setTasks((items) => {
+          if (items.some((task) => task.id === existing.resourceId)) return items;
+          return [existing.payload as Task, ...items];
+        });
+      }
+
+      if (existing.type === "project") {
+        setProjects((items) => {
+          if (items.some((project) => project.id === existing.resourceId)) return items;
+          return [existing.payload as Project, ...items];
+        });
+      }
+
+      if (existing.type === "document") {
+        setDocuments((items) => {
+          if (items.some((doc) => doc.id === existing.resourceId)) return items;
+          return [existing.payload as DocumentFile, ...items];
+        });
+      }
+
+      setRecycleBin((items) => items.filter((item) => item.id !== recycleId));
+      appendAudit({
+        user: currentUser.name,
+        action: `Restored ${existing.type}`,
+        target: existing.title,
+        category: existing.type === "document" ? "File" : existing.type === "project" ? "Project" : "Task",
+        team: existing.team,
+      });
+      pushActivity({ user: currentUser.name, action: `restored ${existing.type}`, target: existing.title });
+    },
+    [appendAudit, currentUser.name, pushActivity, recycleBin]
+  );
+
+  const purgeRecycleItem: DataCtx["purgeRecycleItem"] = useCallback(
+    (recycleId) => {
+      const existing = recycleBin.find((item) => item.id === recycleId);
+      setRecycleBin((items) => items.filter((item) => item.id !== recycleId));
+      if (!existing) return;
+      appendAudit({
+        user: currentUser.name,
+        action: `Permanently deleted ${existing.type}`,
+        target: existing.title,
+        category: existing.type === "document" ? "File" : existing.type === "project" ? "Project" : "Task",
+        team: existing.team,
+      });
+    },
+    [appendAudit, currentUser.name, recycleBin]
   );
 
   const toggleAutomation: DataCtx["toggleAutomation"] = useCallback(
@@ -588,11 +724,13 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       automations,
       auditLog,
       calendarEvents,
+      recycleBin,
       addTask,
       updateTask,
       removeTask,
       addProject,
       updateProject,
+      removeProject,
       toggleMilestone,
       pushActivity,
       markAllRead,
@@ -601,6 +739,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       decideApproval,
       addDocument,
       removeDocument,
+      restoreRecycleItem,
+      purgeRecycleItem,
       toggleAutomation,
       addCalendarEvent,
     }),
@@ -613,11 +753,13 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       automations,
       auditLog,
       calendarEvents,
+      recycleBin,
       addTask,
       updateTask,
       removeTask,
       addProject,
       updateProject,
+      removeProject,
       toggleMilestone,
       pushActivity,
       markAllRead,
@@ -626,6 +768,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       decideApproval,
       addDocument,
       removeDocument,
+      restoreRecycleItem,
+      purgeRecycleItem,
       toggleAutomation,
       addCalendarEvent,
     ]

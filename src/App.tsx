@@ -24,6 +24,7 @@ import ActivityLogs from "./pages/ActivityLogs";
 import Approvals from "./pages/Approvals";
 import Automations from "./pages/Automations";
 import Admin from "./pages/Admin";
+import RecycleBin from "./pages/RecycleBin";
 import Dispatch from "./pages/departments/Dispatch";
 import Recruitment from "./pages/departments/Recruitment";
 import Sales from "./pages/departments/Sales";
@@ -65,6 +66,7 @@ const App = () => (
               <Route path="/clients" element={<Clients />} />
               <Route path="/teams" element={<Teams />} />
               <Route path="/users" element={<Users />} />
+              <Route path="/recycle-bin" element={<RecycleBin />} />
               <Route path="/admin" element={<Admin />} />
               <Route path="/settings" element={<Settings />} />
             </Route>

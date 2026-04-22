@@ -81,13 +81,13 @@ export const ROLE_MODULES: Record<Role, ModuleKey[]> = {
     "dashboard","tasks","projects","calendar","workload","reports",
     "documents","notifications","activity","approvals","automations",
     "dispatch","recruitment","sales","payroll","bookkeeping","clients",
-    "teams","users","admin","settings",
+    "teams","users","recycle","admin","settings",
   ],
   Admin: [
     "dashboard","tasks","projects","calendar","workload","reports",
     "documents","notifications","activity","approvals","automations",
     "dispatch","recruitment","sales","payroll","bookkeeping","clients",
-    "teams","users","admin","settings",
+    "teams","users","recycle","admin","settings",
   ],
   Manager: [
     "dashboard","tasks","projects","calendar","workload","reports",
@@ -102,7 +102,7 @@ export const ROLE_MODULES: Record<Role, ModuleKey[]> = {
 };
 
 /** Modules that should ONLY ever be reachable by Admin-level roles. */
-export const ADMIN_ONLY_MODULES: ModuleKey[] = ["users", "admin", "automations"];
+export const ADMIN_ONLY_MODULES: ModuleKey[] = ["users", "recycle", "admin", "automations"];
 
 /** Friendly labels for the matrix table. */
 export const CAPABILITY_GROUPS: { group: string; caps: { id: Capability; label: string }[] }[] = [

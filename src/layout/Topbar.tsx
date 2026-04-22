@@ -41,6 +41,7 @@ const titles: Record<string, { title: string; subtitle: string }> = {
   "/clients": { title: "Clients", subtitle: "Accounts, relationships and onboarding." },
   "/teams": { title: "Teams", subtitle: "Departments, leads, and live workload." },
   "/users": { title: "User Management", subtitle: "Accounts, roles and access control." },
+  "/recycle-bin": { title: "Recycle Bin", subtitle: "Restore or permanently remove deleted records." },
   "/admin": { title: "Admin Panel", subtitle: "System control, permissions and storage." },
   "/settings": { title: "Settings", subtitle: "Account, permissions, and preferences." },
 };
