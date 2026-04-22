@@ -70,8 +70,8 @@ export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
   if (!open) return null;
 
   return (
-    <div className="fixed bottom-4 right-4 z-40 hidden w-[360px] overflow-hidden rounded-2xl border border-border bg-card shadow-[0_24px_60px_rgba(0,0,0,0.22)] md:flex md:flex-col">
-      <div className="border-b border-border bg-muted/35 px-4 py-3">
+    <div className="fixed bottom-4 right-4 z-40 hidden w-[332px] overflow-hidden rounded-2xl border border-border bg-card shadow-[0_20px_50px_rgba(0,0,0,0.18)] md:flex md:flex-col">
+      <div className="border-b border-border bg-muted/25 px-4 py-3">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
             <Avatar className="h-10 w-10 border border-border/60">
@@ -106,108 +106,134 @@ export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
         </div>
       </div>
 
-      <div className="grid grid-cols-[148px_minmax(0,1fr)] min-h-[460px]">
-        <div className="border-r border-border bg-muted/20">
-          <div className="border-b border-border px-3 py-2">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              {view === "chats" ? "Unread Chats" : "Contacts"}
-            </p>
-          </div>
-          <div className="max-h-[410px] overflow-y-auto">
-            {previews.length === 0 ? (
-              <div className="p-4 text-xs text-muted-foreground">No contacts found.</div>
-            ) : (
-              previews.map(({ user, lastMessage, incomingCount }) => (
-                <button
-                  key={user.id}
-                  type="button"
-                  onClick={() => setSelectedId(user.id)}
-                  className={cn(
-                    "flex w-full items-center gap-2 border-b border-border/60 px-3 py-3 text-left transition-smooth hover:bg-muted/40",
-                    selectedUser?.id === user.id && "bg-primary/5"
-                  )}
-                >
-                  <Avatar className="h-9 w-9">
-                    <AvatarImage src={user.avatarUrl} alt={user.name} />
-                    <AvatarFallback className="bg-primary/10 text-primary text-[11px] font-semibold">{user.initials}</AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="truncate text-xs font-medium">{user.name}</p>
-                      {incomingCount > 0 && (
-                        <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
-                          {incomingCount}
-                        </span>
-                      )}
-                    </div>
-                    <p className="truncate text-[11px] text-muted-foreground">
-                      {lastMessage?.body ?? user.role}
-                    </p>
-                  </div>
-                </button>
-              ))
-            )}
-          </div>
-        </div>
-
-        <div className="flex min-h-0 flex-col bg-background">
-          <div className="border-b border-border px-4 py-3">
-            {selectedUser ? (
-              <div className="flex items-center gap-3">
-                <Avatar className="h-9 w-9">
-                  <AvatarImage src={selectedUser.avatarUrl} alt={selectedUser.name} />
-                  <AvatarFallback className="bg-primary/10 text-primary font-semibold">{selectedUser.initials}</AvatarFallback>
-                </Avatar>
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold">{selectedUser.name}</p>
-                  <p className="truncate text-xs text-muted-foreground">{selectedUser.role}</p>
-                </div>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">Select a teammate to start chatting.</p>
-            )}
-          </div>
-
-          <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
-            {!selectedUser ? (
-              <div className="text-sm text-muted-foreground">No active teammates available.</div>
-            ) : thread.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-                Start a new conversation with {selectedUser.name}.
-              </div>
-            ) : (
-              thread.map((entry) => {
-                const mine = entry.senderId === currentUser.id;
-                return (
-                  <div key={entry.id} className={cn("flex", mine ? "justify-end" : "justify-start")}>
-                    <div className={cn("max-w-[88%] rounded-2xl px-3.5 py-2.5 text-sm", mine ? "bg-primary text-primary-foreground" : "bg-muted")}>
-                      <p>{entry.body}</p>
-                      <p className={cn("mt-1.5 text-[10px]", mine ? "text-primary-foreground/75" : "text-muted-foreground")}>
-                        {new Date(entry.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-                      </p>
+      <div className="min-h-[428px] bg-background">
+        {view === "contacts" ? (
+          <div className="flex h-full flex-col">
+            <div className="border-b border-border px-3 py-2">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Contacts</p>
+            </div>
+            <div className="max-h-[372px] overflow-y-auto">
+              {filteredContacts.length === 0 ? (
+                <div className="p-4 text-xs text-muted-foreground">No contacts found.</div>
+              ) : (
+                filteredContacts.map((user) => (
+                  <div key={user.id} className="flex items-center gap-3 border-b border-border/60 px-4 py-3">
+                    <Avatar className="h-10 w-10">
+                      <AvatarImage src={user.avatarUrl} alt={user.name} />
+                      <AvatarFallback className="bg-primary/10 text-primary text-[11px] font-semibold">{user.initials}</AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{user.name}</p>
+                      <p className="truncate text-xs text-muted-foreground">{user.role}</p>
                     </div>
                   </div>
-                );
-              })
-            )}
-          </div>
-
-          <div className="border-t border-border px-3 py-3">
-            <div className="flex gap-2">
-              <Textarea
-                rows={2}
-                value={message}
-                onChange={(event) => setMessage(event.target.value)}
-                placeholder={selectedUser ? `Message ${selectedUser.name}...` : "Select a teammate first"}
-                className="min-h-[76px] resize-none"
-                disabled={!selectedUser}
-              />
-              <Button className="self-end gradient-primary text-primary-foreground" onClick={submit} disabled={!selectedUser}>
-                <Send className="h-4 w-4" />
-              </Button>
+                ))
+              )}
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="grid h-full grid-cols-[132px_minmax(0,1fr)]">
+            <div className="border-r border-border bg-muted/15">
+              <div className="border-b border-border px-3 py-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Chats</p>
+              </div>
+              <div className="max-h-[372px] overflow-y-auto">
+                {previews.length === 0 ? (
+                  <div className="p-4 text-xs text-muted-foreground">No chats found.</div>
+                ) : (
+                  previews.map(({ user, lastMessage, incomingCount }) => (
+                    <button
+                      key={user.id}
+                      type="button"
+                      onClick={() => setSelectedId(user.id)}
+                      className={cn(
+                        "flex w-full items-center gap-2 border-b border-border/60 px-3 py-3 text-left transition-smooth hover:bg-muted/40",
+                        selectedUser?.id === user.id && "bg-primary/5"
+                      )}
+                    >
+                      <Avatar className="h-8 w-8">
+                        <AvatarImage src={user.avatarUrl} alt={user.name} />
+                        <AvatarFallback className="bg-primary/10 text-primary text-[10px] font-semibold">{user.initials}</AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="truncate text-xs font-medium">{user.name}</p>
+                          {incomingCount > 0 && (
+                            <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
+                              {incomingCount}
+                            </span>
+                          )}
+                        </div>
+                        <p className="truncate text-[10px] text-muted-foreground">
+                          {lastMessage?.body ?? user.role}
+                        </p>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="flex min-h-0 flex-col bg-background">
+              <div className="border-b border-border px-3.5 py-3">
+                {selectedUser ? (
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage src={selectedUser.avatarUrl} alt={selectedUser.name} />
+                      <AvatarFallback className="bg-primary/10 text-primary font-semibold">{selectedUser.initials}</AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold">{selectedUser.name}</p>
+                      <p className="truncate text-[11px] text-muted-foreground">{selectedUser.role}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Select a teammate to start chatting.</p>
+                )}
+              </div>
+
+              <div className="flex-1 space-y-2.5 overflow-y-auto px-3.5 py-3.5">
+                {!selectedUser ? (
+                  <div className="text-sm text-muted-foreground">No active teammates available.</div>
+                ) : thread.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
+                    Start a new conversation with {selectedUser.name}.
+                  </div>
+                ) : (
+                  thread.map((entry) => {
+                    const mine = entry.senderId === currentUser.id;
+                    return (
+                      <div key={entry.id} className={cn("flex", mine ? "justify-end" : "justify-start")}>
+                        <div className={cn("max-w-[88%] rounded-2xl px-3 py-2.5 text-sm", mine ? "bg-primary text-primary-foreground" : "bg-muted")}>
+                          <p>{entry.body}</p>
+                          <p className={cn("mt-1.5 text-[10px]", mine ? "text-primary-foreground/75" : "text-muted-foreground")}>
+                            {new Date(entry.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              <div className="border-t border-border px-3 py-3">
+                <div className="flex gap-2">
+                  <Textarea
+                    rows={2}
+                    value={message}
+                    onChange={(event) => setMessage(event.target.value)}
+                    placeholder={selectedUser ? `Message ${selectedUser.name}...` : "Select a teammate first"}
+                    className="min-h-[68px] resize-none"
+                    disabled={!selectedUser}
+                  />
+                  <Button className="self-end gradient-primary text-primary-foreground" onClick={submit} disabled={!selectedUser}>
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-3 border-t border-border bg-muted/25">
