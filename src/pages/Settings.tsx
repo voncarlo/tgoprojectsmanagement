@@ -37,9 +37,7 @@ const ROLE_DEFAULTS: Record<Role, ModuleKey[]> = {
   "Super Admin": ["dashboard", "tasks", "projects", "reports", "teams", "users", "settings"],
   "Admin":       ["dashboard", "tasks", "projects", "reports", "teams", "users", "settings"],
   "Manager":     ["dashboard", "tasks", "projects", "reports", "teams"],
-  "Team Lead":   ["dashboard", "tasks", "projects", "reports", "teams"],
   "Staff":       ["dashboard", "tasks", "projects", "teams"],
-  "Viewer":      ["dashboard", "projects", "reports"],
 };
 
 const Settings = () => {

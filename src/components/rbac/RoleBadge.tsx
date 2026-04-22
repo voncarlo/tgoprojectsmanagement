@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import { ShieldCheck, Shield, UserCog, Users as UsersIcon, User as UserIcon, Eye } from "lucide-react";
+import { ShieldCheck, Shield, UserCog, User as UserIcon } from "lucide-react";
 import { roleBadgeClass } from "@/auth/permissions";
 import type { Role } from "@/data/mock";
 import { cn } from "@/lib/utils";
@@ -8,9 +8,7 @@ const ICON: Record<Role, typeof ShieldCheck> = {
   "Super Admin": ShieldCheck,
   Admin: Shield,
   Manager: UserCog,
-  "Team Lead": UsersIcon,
   Staff: UserIcon,
-  Viewer: Eye,
 };
 
 interface Props {

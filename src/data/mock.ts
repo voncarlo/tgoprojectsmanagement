@@ -1,4 +1,4 @@
-export type Role = "Super Admin" | "Admin" | "Manager" | "Team Lead" | "Staff" | "Viewer";
+export type Role = "Super Admin" | "Admin" | "Manager" | "Staff";
 export type TeamId =
   | "dispatch"
   | "recruitment"
@@ -151,8 +151,8 @@ export const users: User[] = [
   { id: "u4", name: "Alyanna Alonzo",   email: "alyanna@tgo.com", role: "Manager",     team: "recruitment", teams: ["recruitment","payroll"], modules: [...STAFF_MODULES, "automations", "recruitment", "payroll"], status: "Active", initials: "AA", lastActive: "3h ago" },
   { id: "u5", name: "Mira Chen",        email: "mira@tgo.com",    role: "Staff",       team: "dispatch",    teams: ["dispatch"], modules: STAFF_MODULES, status: "Active", initials: "MC", lastActive: "5m ago" },
   { id: "u6", name: "Daniel Park",      email: "daniel@tgo.com",  role: "Admin",       team: "projects",    teams: ["projects","sales","clients"], modules: ALL_MODULES, status: "Active", initials: "DP", lastActive: "20m ago" },
-  { id: "u7", name: "Sofia Rivera",     email: "sofia@tgo.com",   role: "Team Lead",   team: "recruitment", teams: ["recruitment"], modules: ["dashboard","tasks","projects","calendar","workload","documents","notifications","approvals","recruitment","teams","settings"], status: "Active", initials: "SR", lastActive: "30m ago" },
-  { id: "u8", name: "Marcus Lee",       email: "marcus@tgo.com",  role: "Viewer",      team: "projects",    teams: ["projects"], modules: ["dashboard","projects","reports","notifications","settings"], status: "Active", initials: "ML", lastActive: "2h ago" },
+  { id: "u7", name: "Sofia Rivera",     email: "sofia@tgo.com",   role: "Staff",       team: "recruitment", teams: ["recruitment"], modules: ["dashboard","tasks","projects","calendar","documents","notifications","approvals","recruitment","teams","settings"], status: "Active", initials: "SR", lastActive: "30m ago" },
+  { id: "u8", name: "Marcus Lee",       email: "marcus@tgo.com",  role: "Staff",       team: "projects",    teams: ["projects"], modules: ["dashboard","tasks","projects","reports","notifications","teams","settings"], status: "Active", initials: "ML", lastActive: "2h ago" },
 ];
 
 export const projects: Project[] = [

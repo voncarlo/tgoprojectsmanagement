@@ -534,7 +534,13 @@ const Tasks = () => {
                 </div>
 
                 <div className="flex justify-between pt-2 border-t border-border">
-                  <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => { removeTask(open.id); toast.success("Task deleted"); setOpen(null); }}>
+                  <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => {
+                    const confirmed = window.confirm(`Delete "${open.title}"? This cannot be undone.`);
+                    if (!confirmed) return;
+                    removeTask(open.id);
+                    toast.success("Task deleted");
+                    setOpen(null);
+                  }}>
                     <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => setOpen(null)}>Close</Button>

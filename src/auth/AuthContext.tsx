@@ -161,7 +161,7 @@ export const useAuth = (): AuthCtx => {
     id: "anon",
     name: "Guest",
     email: "",
-    role: "Viewer",
+    role: "Staff",
     team: "projects",
     teams: [],
     modules: [],

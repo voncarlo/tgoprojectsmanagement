@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Plus, Search, KeyRound, Pencil, ShieldAlert, ShieldCheck } from "lucide-react";
+import { Plus, Search, KeyRound, Pencil, ShieldAlert, ShieldCheck, Trash2 } from "lucide-react";
 import { teams, type ModuleKey, type Role, type TeamId, type User } from "@/data/mock";
 import { useAuth } from "@/auth/AuthContext";
 import { toast } from "sonner";
@@ -87,6 +87,14 @@ const Users = () => {
     toast.success(`Password reset for ${resetting.name}`);
     setResetting(null);
     setPwd("");
+  };
+
+  const removeUser = (user: User) => {
+    if (user.id === currentUser.id) return toast.error("You cannot remove your own account.");
+    const confirmed = window.confirm(`Delete ${user.name}'s account? This cannot be undone.`);
+    if (!confirmed) return;
+    setUserList(userList.filter((item) => item.id !== user.id));
+    toast.success("User account deleted");
   };
 
   if (!isAdmin) {
@@ -186,6 +194,9 @@ const Users = () => {
                       </Button>
                       <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => { setResetting(u); setPwd(""); }}>
                         <KeyRound className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-8 px-2 text-destructive hover:text-destructive" onClick={() => removeUser(u)} disabled={u.id === currentUser.id}>
+                        <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                       <Switch
                         checked={u.status === "Active"}

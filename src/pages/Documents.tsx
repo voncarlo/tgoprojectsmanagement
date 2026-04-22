@@ -139,7 +139,12 @@ const Documents = () => {
                     <td className="p-3 text-xs text-muted-foreground">{doc.updated}</td>
                     <td className="p-3 text-right">
                       <Button variant="ghost" size="icon" className="h-7 w-7"><Download className="h-3.5 w-3.5" /></Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { removeDocument(doc.id); toast.success("Document removed"); }}><Trash2 className="h-3.5 w-3.5" /></Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => {
+                        const confirmed = window.confirm(`Delete "${doc.name}"? This cannot be undone.`);
+                        if (!confirmed) return;
+                        removeDocument(doc.id);
+                        toast.success("Document removed");
+                      }}><Trash2 className="h-3.5 w-3.5" /></Button>
                     </td>
                   </tr>
                 );

@@ -68,19 +68,9 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "document.upload",
     "data.export",
   ],
-  "Team Lead": [
-    "task.create", "task.edit.assigned", "task.assign",
-    "project.edit.team",
-    "approval.view",
-    "report.view",
-    "document.upload",
-  ],
   Staff: [
     "task.edit.assigned",
     "document.upload",
-    "report.view",
-  ],
-  Viewer: [
     "report.view",
   ],
 };
@@ -104,18 +94,10 @@ export const ROLE_MODULES: Record<Role, ModuleKey[]> = {
     "documents","notifications","activity","approvals",
     "teams","settings",
   ],
-  "Team Lead": [
-    "dashboard","tasks","projects","calendar","workload",
-    "documents","notifications","approvals",
-    "teams","settings",
-  ],
   Staff: [
     "dashboard","tasks","projects","calendar",
     "documents","notifications",
     "settings",
-  ],
-  Viewer: [
-    "dashboard","projects","reports","notifications","settings",
   ],
 };
 
@@ -184,7 +166,7 @@ export const CAPABILITY_GROUPS: { group: string; caps: { id: Capability; label: 
   },
 ];
 
-export const ALL_ROLES: Role[] = ["Super Admin", "Admin", "Manager", "Team Lead", "Staff", "Viewer"];
+export const ALL_ROLES: Role[] = ["Super Admin", "Admin", "Manager", "Staff"];
 
 export const roleBadgeClass = (role: Role) => {
   switch (role) {
@@ -194,11 +176,8 @@ export const roleBadgeClass = (role: Role) => {
       return "bg-info/10 text-info border border-info/20";
     case "Manager":
       return "bg-accent/15 text-accent-foreground border border-accent/30";
-    case "Team Lead":
-      return "bg-warning/10 text-warning border border-warning/30";
     case "Staff":
       return "bg-muted text-muted-foreground border border-border";
-    case "Viewer":
     default:
       return "bg-muted/60 text-muted-foreground border border-border";
   }
