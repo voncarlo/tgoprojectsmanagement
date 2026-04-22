@@ -38,6 +38,7 @@ export interface ChatMessage {
   recipientName: string;
   body: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface PersonalNote {
@@ -113,6 +114,8 @@ interface DataCtx {
   toggleAutomation: (id: string) => void;
   addCalendarEvent: (event: Omit<CalendarEvent, "id">) => CalendarEvent;
   sendChatMessage: (recipientId: string, body: string) => void;
+  updateChatMessage: (messageId: string, body: string) => void;
+  removeChatMessage: (messageId: string) => void;
   addPersonalNote: (note: Omit<PersonalNote, "id" | "userId" | "createdAt" | "updatedAt">) => void;
   updatePersonalNote: (id: string, patch: Partial<PersonalNote>) => void;
   removePersonalNote: (id: string) => void;
@@ -830,6 +833,28 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     [auth.userList, currentUser.id, currentUser.name, pushActivity]
   );
 
+  const updateChatMessage: DataCtx["updateChatMessage"] = useCallback(
+    (messageId, body) => {
+      const trimmed = body.trim();
+      if (!trimmed) return;
+      setChats((items) =>
+        items.map((entry) =>
+          entry.id === messageId && entry.senderId === currentUser.id
+            ? { ...entry, body: trimmed, updatedAt: new Date().toISOString() }
+            : entry
+        )
+      );
+    },
+    [currentUser.id]
+  );
+
+  const removeChatMessage: DataCtx["removeChatMessage"] = useCallback(
+    (messageId) => {
+      setChats((items) => items.filter((entry) => !(entry.id === messageId && entry.senderId === currentUser.id)));
+    },
+    [currentUser.id]
+  );
+
   const addPersonalNote: DataCtx["addPersonalNote"] = useCallback(
     (note) => {
       const now = new Date().toISOString();
@@ -895,6 +920,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       toggleAutomation,
       addCalendarEvent,
       sendChatMessage,
+      updateChatMessage,
+      removeChatMessage,
       addPersonalNote,
       updatePersonalNote,
       removePersonalNote,
@@ -930,6 +957,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       toggleAutomation,
       addCalendarEvent,
       sendChatMessage,
+      updateChatMessage,
+      removeChatMessage,
       addPersonalNote,
       updatePersonalNote,
       removePersonalNote,

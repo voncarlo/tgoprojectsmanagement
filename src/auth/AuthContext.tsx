@@ -16,10 +16,12 @@ interface AuthCtx {
   canSeeTeam: (t: TeamId) => boolean;
   visibleTeams: TeamId[];
   capabilities: Capability[];
-  signIn: (email: string, password: string) => { ok: boolean; message?: string };
+  signIn: (email: string, password: string, options?: { remember?: boolean }) => { ok: boolean; message?: string };
   signOut: () => void;
   updatePassword: (currentPassword: string, nextPassword: string, userId?: string) => { ok: boolean; message?: string };
   setPasswordForUser: (userId: string, nextPassword: string) => void;
+  resetPasswordForEmail: (email: string) => { ok: boolean; message?: string; temporaryPassword?: string };
+  rememberedEmail: string;
   deleteUser: (userId: string) => void;
 }
 
@@ -31,6 +33,7 @@ interface PersistedAuthState {
 }
 
 const STORAGE_KEY = "tgo.auth";
+const REMEMBER_EMAIL_KEY = "tgo.auth.rememberedEmail";
 const STORAGE_VERSION = 5;
 const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   enabled: true,
@@ -133,6 +136,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [userList, setUserList] = useState<User[]>(initialState.userList);
   const [currentUserId, setCurrentUserId] = useState<string>(initialState.currentUserId);
   const [passwords, setPasswords] = useState<Record<string, string>>(initialState.passwords);
+  const [rememberedEmail, setRememberedEmail] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    return window.localStorage.getItem(REMEMBER_EMAIL_KEY) ?? "";
+  });
 
   useEffect(() => {
     setPasswords((prev) => {
@@ -165,6 +172,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       } satisfies PersistedAuthState)
     );
   }, [currentUserId, passwords, userList]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (rememberedEmail.trim()) {
+      window.localStorage.setItem(REMEMBER_EMAIL_KEY, rememberedEmail);
+      return;
+    }
+    window.localStorage.removeItem(REMEMBER_EMAIL_KEY);
+  }, [rememberedEmail]);
 
   const currentUser = userList.find((user) => user.id === currentUserId) ?? userList[0] ?? seedUsers[0];
 
@@ -203,13 +219,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       },
       canSeeTeam: () => true,
       visibleTeams: ["dispatch", "recruitment", "sales", "clients", "projects", "payroll", "bookkeeping"] as TeamId[],
-      signIn: (email, password) => {
-        const account = userList.find((user) => user.email.toLowerCase() === email.trim().toLowerCase());
+      signIn: (email, password, options) => {
+        const normalizedEmail = email.trim().toLowerCase();
+        const account = userList.find((user) => user.email.toLowerCase() === normalizedEmail);
         if (!account) return { ok: false, message: "No account found for that email." };
         if (account.status !== "Active") return { ok: false, message: "This account is inactive." };
         if ((passwords[account.id] ?? "") !== password) {
           return { ok: false, message: "Incorrect password." };
         }
+        setRememberedEmail(options?.remember ? account.email : "");
         setCurrentUserId(account.id);
         return { ok: true };
       },
@@ -227,6 +245,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setPasswordForUser: (userId, nextPassword) => {
         setPasswords((prev) => ({ ...prev, [userId]: nextPassword }));
       },
+      resetPasswordForEmail: (email) => {
+        const account = userList.find((user) => user.email.toLowerCase() === email.trim().toLowerCase());
+        if (!account) return { ok: false, message: "No account found for that email." };
+        if (account.status !== "Active") return { ok: false, message: "This account is inactive." };
+        const temporaryPassword = `TGO-${Math.random().toString(36).slice(2, 6).toUpperCase()}!`;
+        setPasswords((prev) => ({ ...prev, [account.id]: temporaryPassword }));
+        return {
+          ok: true,
+          message: "Temporary password created. Sign in and change it right away in Settings.",
+          temporaryPassword,
+        };
+      },
+      rememberedEmail,
       deleteUser: (userId) => {
         setUserList((prev) => prev.filter((user) => user.id !== userId));
         setPasswords((prev) => {
@@ -276,6 +307,8 @@ export const useAuth = (): AuthCtx => {
     signOut: () => {},
     updatePassword: () => ({ ok: false, message: "Authentication unavailable." }),
     setPasswordForUser: () => {},
+    resetPasswordForEmail: () => ({ ok: false, message: "Authentication unavailable." }),
+    rememberedEmail: "",
     deleteUser: () => {},
   };
 };

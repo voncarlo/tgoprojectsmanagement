@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { MessageSquare, Minimize2, Paperclip, Search, Send, Smile, Users, X } from "lucide-react";
+import { MessageSquare, Minimize2, Paperclip, Pencil, Search, Send, Smile, Trash2, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
@@ -16,11 +16,13 @@ interface FloatingChatProps {
 
 export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
   const { currentUser, userList } = useAuth();
-  const { chats, sendChatMessage } = useData();
+  const { chats, sendChatMessage, updateChatMessage, removeChatMessage } = useData();
   const contacts = userList.filter((user) => user.id !== currentUser.id && user.status === "Active");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingBody, setEditingBody] = useState("");
   const [view, setView] = useState<"chats" | "contacts">("chats");
 
   const filteredContacts = useMemo(() => {
@@ -64,6 +66,14 @@ export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
     toast.success(`Message sent to ${selectedUser.name}`);
   };
 
+  const saveEdit = () => {
+    if (!editingId || !editingBody.trim()) return;
+    updateChatMessage(editingId, editingBody);
+    setEditingId(null);
+    setEditingBody("");
+    toast.success("Message updated");
+  };
+
   if (!open) return null;
 
   return (
@@ -93,7 +103,7 @@ export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
             </div>
           </div>
 
-          <div className="flex-1 space-y-3 overflow-y-auto bg-background px-4 py-4 min-h-[390px] max-h-[390px]">
+          <div className="flex-1 space-y-2 overflow-y-auto bg-background px-4 py-4 min-h-[390px] max-h-[390px]">
             {thread.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
                 Start a new conversation with {selectedUser.name}.
@@ -103,11 +113,45 @@ export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
                 const mine = entry.senderId === currentUser.id;
                 return (
                   <div key={entry.id} className={cn("flex", mine ? "justify-end" : "justify-start")}>
-                    <div className={cn("max-w-[84%] rounded-2xl px-3.5 py-2.5 text-sm", mine ? "bg-primary text-primary-foreground" : "bg-muted")}>
-                      <p>{entry.body}</p>
-                      <p className={cn("mt-1.5 text-[10px]", mine ? "text-primary-foreground/75" : "text-muted-foreground")}>
-                        {new Date(entry.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-                      </p>
+                    <div className={cn("group max-w-[78%] rounded-2xl px-3 py-2 text-[12.5px]", mine ? "bg-primary text-primary-foreground" : "bg-muted")}>
+                      {editingId === entry.id ? (
+                        <div className="space-y-2">
+                          <Textarea rows={2} value={editingBody} onChange={(event) => setEditingBody(event.target.value)} className="min-h-[64px] resize-none border-0 bg-transparent px-0 py-0 text-[12.5px] shadow-none focus-visible:ring-0" />
+                          <div className="flex justify-end gap-2">
+                            <Button size="sm" variant="ghost" onClick={() => { setEditingId(null); setEditingBody(""); }}>Cancel</Button>
+                            <Button size="sm" className="gradient-primary text-primary-foreground" onClick={saveEdit}>Save</Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <p>{entry.body}</p>
+                          <div className="mt-1 flex items-center justify-between gap-2">
+                            <p className={cn("text-[9px]", mine ? "text-primary-foreground/75" : "text-muted-foreground")}>
+                              {new Date(entry.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                              {entry.updatedAt ? " · edited" : ""}
+                            </p>
+                            {mine && (
+                              <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                                <button type="button" className={cn("rounded p-1", mine ? "hover:bg-primary-foreground/10" : "hover:bg-background/80")} onClick={() => { setEditingId(entry.id); setEditingBody(entry.body); }}>
+                                  <Pencil className="h-3 w-3" />
+                                </button>
+                                <button
+                                  type="button"
+                                  className={cn("rounded p-1 text-destructive", mine ? "hover:bg-primary-foreground/10" : "hover:bg-background/80")}
+                                  onClick={() => {
+                                    const confirmed = window.confirm("Delete this message?");
+                                    if (!confirmed) return;
+                                    removeChatMessage(entry.id);
+                                    toast.success("Message deleted");
+                                  }}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 );

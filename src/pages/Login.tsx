@@ -1,16 +1,18 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Mail, Lock, Eye, EyeOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Logo } from "@/components/portal/Logo";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/auth/AuthContext";
+import { toast } from "sonner";
 
 const Login = () => {
-  const { signIn } = useAuth();
+  const { signIn, resetPasswordForEmail, rememberedEmail } = useAuth();
   const navigate = useNavigate();
 
   const [email, setEmail] = useState("");
@@ -19,6 +21,16 @@ const Login = () => {
   const [remember, setRemember] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [forgotOpen, setForgotOpen] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [temporaryPassword, setTemporaryPassword] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!rememberedEmail) return;
+    setEmail(rememberedEmail);
+    setForgotEmail(rememberedEmail);
+    setRemember(true);
+  }, [rememberedEmail]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,13 +42,23 @@ const Login = () => {
     setLoading(true);
     setTimeout(() => {
       setLoading(false);
-      const result = signIn(email, password);
+      const result = signIn(email, password, { remember });
       if (!result.ok) {
         setError(result.message ?? "Unable to sign in.");
         return;
       }
       navigate("/dashboard");
     }, 600);
+  };
+
+  const handleForgotPassword = () => {
+    const result = resetPasswordForEmail(forgotEmail || email);
+    if (!result.ok) {
+      toast.error(result.message ?? "Unable to reset password.");
+      return;
+    }
+    setTemporaryPassword(result.temporaryPassword ?? null);
+    toast.success(result.message ?? "Temporary password created.");
   };
 
   return (
@@ -108,6 +130,11 @@ const Login = () => {
               </label>
               <button
                 type="button"
+                onClick={() => {
+                  setForgotEmail(email);
+                  setTemporaryPassword(null);
+                  setForgotOpen(true);
+                }}
                 className="text-sm font-medium text-primary hover:underline"
               >
                 Forgot password?
@@ -138,9 +165,42 @@ const Login = () => {
         </div>
 
         <p className="mt-6 text-center text-[11px] text-muted-foreground">
-          © {new Date().getFullYear()} TGO Projects Portal. Internal use only.
+          © {new Date().getFullYear()} TGO Projects Portal.
         </p>
       </div>
+
+      <Dialog open={forgotOpen} onOpenChange={setForgotOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Forgot password</DialogTitle>
+            <DialogDescription>
+              Generate a temporary password for your account, then change it after you sign in.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label htmlFor="forgot-email">Email</Label>
+              <Input
+                id="forgot-email"
+                type="email"
+                value={forgotEmail}
+                onChange={(event) => setForgotEmail(event.target.value)}
+                placeholder="Enter your account email"
+              />
+            </div>
+            {temporaryPassword && (
+              <div className="rounded-xl border border-primary/30 bg-primary/5 p-3">
+                <p className="text-xs uppercase tracking-wider text-muted-foreground">Temporary password</p>
+                <p className="mt-1 text-sm font-semibold text-foreground">{temporaryPassword}</p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setForgotOpen(false)}>Close</Button>
+            <Button className="gradient-primary text-primary-foreground" onClick={handleForgotPassword}>Generate reset</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
