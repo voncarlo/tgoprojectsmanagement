@@ -95,7 +95,7 @@ export const ROLE_MODULES: Record<Role, ModuleKey[]> = {
     "teams","settings",
   ],
   Staff: [
-    "dashboard","tasks","projects","calendar",
+    "dashboard","tasks","projects","calendar","reports","activity",
     "documents","notifications",
     "settings",
   ],
