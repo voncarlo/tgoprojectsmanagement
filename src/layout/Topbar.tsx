@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bell, Search, Plus, CheckCheck, Sun, Moon, Command as CommandIcon, Menu, MessageSquare } from "lucide-react";
+import { Bell, Search, Plus, CheckCheck, Sun, Moon, Command as CommandIcon, Menu, MessageSquare, LogOut, Settings, Sparkles, UserCircle2 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -178,21 +178,64 @@ export const Topbar = () => {
                 </Avatar>
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuLabel>
-                <div className="flex flex-col">
-                  <span className="font-medium">{currentUser.name}</span>
-                  <span className="text-xs text-muted-foreground font-normal">{currentUser.role} · {team}</span>
+            <DropdownMenuContent align="end" className="w-72 overflow-hidden rounded-2xl border border-border/70 bg-background/95 p-0 shadow-[0_18px_45px_rgba(15,23,42,0.16)] backdrop-blur-xl">
+              <DropdownMenuLabel className="border-b border-border/70 bg-muted/35 px-4 py-4">
+                <div className="flex items-start gap-3">
+                  <Avatar className="h-11 w-11 border border-border/70 shadow-sm">
+                    <AvatarImage src={currentUser.avatarUrl} alt={currentUser.name} />
+                    <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">{currentUser.initials}</AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate text-sm font-semibold text-foreground">{currentUser.name}</span>
+                      <Sparkles className="h-3.5 w-3.5 shrink-0 text-primary" />
+                    </div>
+                    <p className="mt-1 text-xs font-normal text-muted-foreground">{currentUser.role} · {team}</p>
+                    <div className="mt-2 inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary">
+                      Account center
+                    </div>
+                  </div>
                 </div>
               </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => navigate("/settings")}>Profile</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate("/settings")}>Preferences</DropdownMenuItem>
-              <DropdownMenuItem onClick={toggleTheme}>
-                {theme === "dark" ? <Sun className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}
-                {theme === "dark" ? "Light mode" : "Dark mode"}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => { signOut(); navigate("/login"); }}>Sign out</DropdownMenuItem>
+              <div className="p-2">
+                <DropdownMenuItem onClick={() => navigate("/settings")} className="rounded-xl px-3 py-3 focus:bg-muted/70">
+                  <UserCircle2 className="mr-3 h-4 w-4 text-primary" />
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium">Profile</span>
+                    <span className="text-[11px] text-muted-foreground">Account details and picture</span>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate("/settings")} className="rounded-xl px-3 py-3 focus:bg-muted/70">
+                  <Settings className="mr-3 h-4 w-4 text-primary" />
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium">Preferences</span>
+                    <span className="text-[11px] text-muted-foreground">Notifications, theme, and settings</span>
+                  </div>
+                </DropdownMenuItem>
+              </div>
+              <DropdownMenuSeparator className="bg-border/70" />
+              <div className="p-2">
+                <DropdownMenuItem onClick={toggleTheme} className="rounded-xl px-3 py-3 focus:bg-muted/70">
+                  {theme === "dark" ? <Sun className="mr-3 h-4 w-4 text-primary" /> : <Moon className="mr-3 h-4 w-4 text-primary" />}
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium">{theme === "dark" ? "Light mode" : "Dark mode"}</span>
+                    <span className="text-[11px] text-muted-foreground">Switch the portal appearance</span>
+                  </div>
+                </DropdownMenuItem>
+              </div>
+              <DropdownMenuSeparator className="bg-border/70" />
+              <div className="p-2">
+                <DropdownMenuItem
+                  onClick={() => { signOut(); navigate("/login"); }}
+                  className="rounded-xl px-3 py-3 text-destructive focus:bg-destructive/10 focus:text-destructive"
+                >
+                  <LogOut className="mr-3 h-4 w-4" />
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium">Sign out</span>
+                    <span className="text-[11px] text-muted-foreground">Leave this session safely</span>
+                  </div>
+                </DropdownMenuItem>
+              </div>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
