@@ -18,18 +18,22 @@ interface AuthCtx {
   signIn: (email: string, password: string) => { ok: boolean; message?: string };
   signOut: () => void;
   updatePassword: (currentPassword: string, nextPassword: string, userId?: string) => { ok: boolean; message?: string };
+  setPasswordForUser: (userId: string, nextPassword: string) => void;
+  deleteUser: (userId: string) => void;
 }
 
 interface PersistedAuthState {
+  version?: number;
   currentUserId: string;
   passwords: Record<string, string>;
   userList: User[];
 }
 
 const STORAGE_KEY = "tgo.auth";
+const STORAGE_VERSION = 4;
 
 const defaultPasswords = seedUsers.reduce<Record<string, string>>((acc, user) => {
-  acc[user.id] = "password123";
+  acc[user.id] = user.email.toLowerCase() === "von.asinas@tgocorp.com" ? "Von@4213" : "";
   return acc;
 }, {});
 
@@ -95,9 +99,11 @@ const loadAuthState = (): PersistedAuthState => {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return defaultAuthState;
     const parsed = JSON.parse(raw) as Partial<PersistedAuthState>;
+    if (parsed.version !== STORAGE_VERSION) return defaultAuthState;
     const mergedUsers = mergeUsers(parsed.userList);
     const hasCurrent = mergedUsers.some((user) => user.id === parsed.currentUserId);
     return {
+      version: STORAGE_VERSION,
       currentUserId: hasCurrent ? parsed.currentUserId ?? defaultAuthState.currentUserId : defaultAuthState.currentUserId,
       passwords: { ...defaultPasswords, ...(parsed.passwords ?? {}) },
       userList: mergedUsers,
@@ -121,7 +127,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const next = { ...prev };
       for (const user of userList) {
         if (!next[user.id]) {
-          next[user.id] = "password123";
+          next[user.id] = "";
           changed = true;
         }
       }
@@ -139,6 +145,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     window.localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
+        version: STORAGE_VERSION,
         currentUserId,
         passwords,
         userList,
@@ -182,7 +189,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const account = userList.find((user) => user.email.toLowerCase() === email.trim().toLowerCase());
         if (!account) return { ok: false, message: "No account found for that email." };
         if (account.status !== "Active") return { ok: false, message: "This account is inactive." };
-        if ((passwords[account.id] ?? "password123") !== password) {
+        if ((passwords[account.id] ?? "") !== password) {
           return { ok: false, message: "Incorrect password." };
         }
         setCurrentUserId(account.id);
@@ -193,11 +200,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setCurrentUserId(fallback.id);
       },
       updatePassword: (currentPassword, nextPassword, userId = currentUser.id) => {
-        if ((passwords[userId] ?? "password123") !== currentPassword) {
+        if ((passwords[userId] ?? "") !== currentPassword) {
           return { ok: false, message: "Current password is incorrect." };
         }
         setPasswords((prev) => ({ ...prev, [userId]: nextPassword }));
         return { ok: true };
+      },
+      setPasswordForUser: (userId, nextPassword) => {
+        setPasswords((prev) => ({ ...prev, [userId]: nextPassword }));
+      },
+      deleteUser: (userId) => {
+        setUserList((prev) => prev.filter((user) => user.id !== userId));
+        setPasswords((prev) => {
+          const next = { ...prev };
+          delete next[userId];
+          return next;
+        });
+        if (currentUserId === userId) setCurrentUserId(seedUsers[0].id);
       },
     };
   }, [currentUser, currentUserId, passwords, userList]);
@@ -237,5 +256,7 @@ export const useAuth = (): AuthCtx => {
     signIn: () => ({ ok: false, message: "Authentication unavailable." }),
     signOut: () => {},
     updatePassword: () => ({ ok: false, message: "Authentication unavailable." }),
+    setPasswordForUser: () => {},
+    deleteUser: () => {},
   };
 };

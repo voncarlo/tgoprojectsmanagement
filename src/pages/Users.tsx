@@ -47,13 +47,14 @@ const initialsOf = (name: string) =>
   name.trim().split(/\s+/).map((n) => n[0]).slice(0, 2).join("").toUpperCase() || "··";
 
 const Users = () => {
-  const { isAdmin, isSuperAdmin, userList, setUserList, currentUser } = useAuth();
+  const { isAdmin, isSuperAdmin, userList, setUserList, currentUser, setPasswordForUser, deleteUser } = useAuth();
   const [q, setQ] = useState("");
   const [teamFilter, setTeamFilter] = useState<string>("all");
   const [roleFilter, setRoleFilter] = useState<string>("all");
   const [editing, setEditing] = useState<User | null>(null);
   const [resetting, setResetting] = useState<User | null>(null);
   const [pwd, setPwd] = useState("");
+  const [editingPassword, setEditingPassword] = useState("");
 
   const filtered = useMemo(
     () =>
@@ -71,8 +72,18 @@ const Users = () => {
     if (next.teams.length === 0) next.teams = [next.team];
     if (!next.teams.includes(next.team)) next.team = next.teams[0];
     const exists = userList.some((x) => x.id === u.id);
+    if (!exists && editingPassword.length < 8) {
+      toast.error("New users need a password with at least 8 characters.");
+      return;
+    }
     setUserList(exists ? userList.map((x) => (x.id === u.id ? next : x)) : [...userList, next]);
+    if (!exists) {
+      setPasswordForUser(next.id, editingPassword);
+    } else if (editingPassword.trim()) {
+      setPasswordForUser(next.id, editingPassword);
+    }
     toast.success(exists ? "User updated" : "User created");
+    setEditingPassword("");
     setEditing(null);
   };
 
@@ -84,6 +95,7 @@ const Users = () => {
 
   const doReset = () => {
     if (!resetting || pwd.length < 6) return toast.error("Password must be at least 6 characters.");
+    setPasswordForUser(resetting.id, pwd);
     toast.success(`Password reset for ${resetting.name}`);
     setResetting(null);
     setPwd("");
@@ -93,7 +105,7 @@ const Users = () => {
     if (user.id === currentUser.id) return toast.error("You cannot remove your own account.");
     const confirmed = window.confirm(`Delete ${user.name}'s account? This cannot be undone.`);
     if (!confirmed) return;
-    setUserList(userList.filter((item) => item.id !== user.id));
+    deleteUser(user.id);
     toast.success("User account deleted");
   };
 
@@ -113,7 +125,7 @@ const Users = () => {
         title="User Management"
         description="Manage accounts, roles, departments, and module access."
         actions={
-          <Button className="gradient-primary text-primary-foreground gap-1.5" onClick={() => setEditing(emptyUser())}>
+          <Button className="gradient-primary text-primary-foreground gap-1.5" onClick={() => { setEditing(emptyUser()); setEditingPassword(""); }}>
             <Plus className="h-4 w-4" /> Add user
           </Button>
         }
@@ -189,7 +201,7 @@ const Users = () => {
                   <td className="p-3 text-xs text-muted-foreground">{u.lastActive ?? "—"}</td>
                   <td className="p-3">
                     <div className="flex items-center justify-end gap-1">
-                      <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => setEditing(u)}>
+                      <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => { setEditing(u); setEditingPassword(""); }}>
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
                       <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => { setResetting(u); setPwd(""); }}>
@@ -233,6 +245,10 @@ const Users = () => {
                 <div className="space-y-2">
                   <Label>Email</Label>
                   <Input type="email" value={editing.email} onChange={(e) => setEditing({ ...editing, email: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label>{userList.some((x) => x.id === editing.id) ? "New password (optional)" : "Password"}</Label>
+                  <Input type="password" value={editingPassword} onChange={(e) => setEditingPassword(e.target.value)} placeholder={userList.some((x) => x.id === editing.id) ? "Leave blank to keep current password" : "At least 8 characters"} />
                 </div>
                 <div className="space-y-2">
                   <Label>Role</Label>

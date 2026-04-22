@@ -134,9 +134,6 @@ const Login = () => {
             <p className="text-center text-xs text-muted-foreground pt-2">
               Need access? <span className="font-medium text-primary">Contact your administrator.</span>
             </p>
-            <p className="text-center text-[11px] text-muted-foreground">
-              Demo password: <span className="font-medium text-foreground">password123</span>
-            </p>
           </form>
         </div>
 
