@@ -11,7 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { users as allUsers, teams } from "@/data/mock";
+import { teams } from "@/data/mock";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
 import { useData } from "@/store/DataContext";
@@ -50,7 +50,7 @@ export const Topbar = () => {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const meta = titles[pathname] ?? titles["/dashboard"];
-  const { currentUser, setCurrentUser, userList } = useAuth();
+  const { currentUser, setCurrentUser, userList, signOut } = useAuth();
   const { notifications, unreadCount, markAllRead } = useData();
   const { theme, toggleTheme } = useTheme();
   const team = teams.find((t) => t.id === currentUser.team)?.name ?? currentUser.team;
@@ -175,7 +175,7 @@ export const Topbar = () => {
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuLabel className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Switch demo user</DropdownMenuLabel>
-            {(userList.length ? userList : allUsers).map((u) => (
+            {userList.map((u) => (
               <DropdownMenuItem key={u.id} onClick={() => { setCurrentUser(u); toast.success(`Signed in as ${u.name}`); }} className="text-xs">
                 <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary text-[9px] font-semibold mr-2">{u.initials}</span>
                 {u.name} <span className="ml-auto text-[10px] text-muted-foreground">{u.role}</span>
@@ -184,7 +184,7 @@ export const Topbar = () => {
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => navigate("/settings")}>Profile</DropdownMenuItem>
             <DropdownMenuItem onClick={() => navigate("/settings")}>Preferences</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => navigate("/login")}>Sign out</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => { signOut(); navigate("/login"); }}>Sign out</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

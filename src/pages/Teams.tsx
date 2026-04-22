@@ -5,15 +5,17 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { teams, tasks, projects, statusColor, priorityColor, projectStatusColor, type TeamId } from "@/data/mock";
+import { teams, statusColor, priorityColor, projectStatusColor, type TeamId } from "@/data/mock";
 import { useAuth } from "@/auth/AuthContext";
 import { toast } from "sonner";
 import { useState } from "react";
 import { PageHeader } from "@/components/portal/PageHeader";
 import { TeamIcon } from "@/components/portal/TeamIcon";
+import { useData } from "@/store/DataContext";
 
 const Teams = () => {
   const { userList, setUserList, visibleTeams, isAdmin } = useAuth();
+  const { tasks, projects } = useData();
   const visible = teams.filter(t => visibleTeams.includes(t.id));
   const [openTeam, setOpenTeam] = useState<TeamId | null>(null);
 

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { GitBranch, Check, X, RotateCcw, CalendarDays } from "lucide-react";
-import { approvals as seed, teams, type Approval, type ApprovalStatus } from "@/data/mock";
+import { teams, type Approval, type ApprovalStatus } from "@/data/mock";
 import { PageHeader } from "@/components/portal/PageHeader";
 import { TeamIcon } from "@/components/portal/TeamIcon";
 import { StatTile } from "@/components/portal/StatTile";
@@ -14,6 +14,7 @@ import { useAuth } from "@/auth/AuthContext";
 import { toast } from "sonner";
 import { Can } from "@/components/rbac/Can";
 import { Lock } from "lucide-react";
+import { useData } from "@/store/DataContext";
 
 const STATUS_TONE: Record<ApprovalStatus, string> = {
   Pending: "bg-warning/10 text-warning border-warning/20",
@@ -32,23 +33,22 @@ const TYPE_TONE = {
 };
 
 const Approvals = () => {
-  const { visibleTeams, can } = useAuth();
-  const canDecide = can("approval.decide");
-  const [list, setList] = useState<Approval[]>(seed);
+  const { visibleTeams } = useAuth();
+  const { approvals, decideApproval } = useData();
   const [filter, setFilter] = useState<ApprovalStatus | "All">("All");
   const [open, setOpen] = useState<Approval | null>(null);
   const [comment, setComment] = useState("");
 
-  const visible = useMemo(() => list.filter((a) => visibleTeams.includes(a.team) && (filter === "All" || a.status === filter)), [list, visibleTeams, filter]);
+  const visible = useMemo(() => approvals.filter((a) => visibleTeams.includes(a.team) && (filter === "All" || a.status === filter)), [approvals, visibleTeams, filter]);
   const counts = {
-    pending: list.filter((a) => a.status === "Pending").length,
-    review: list.filter((a) => a.status === "Under Review").length,
-    approved: list.filter((a) => a.status === "Approved").length,
-    rejected: list.filter((a) => a.status === "Rejected").length,
+    pending: approvals.filter((a) => visibleTeams.includes(a.team) && a.status === "Pending").length,
+    review: approvals.filter((a) => visibleTeams.includes(a.team) && a.status === "Under Review").length,
+    approved: approvals.filter((a) => visibleTeams.includes(a.team) && a.status === "Approved").length,
+    rejected: approvals.filter((a) => visibleTeams.includes(a.team) && a.status === "Rejected").length,
   };
 
   const decide = (id: string, status: ApprovalStatus) => {
-    setList((s) => s.map((a) => (a.id === id ? { ...a, status } : a)));
+    decideApproval(id, status, comment.trim() || undefined);
     toast.success(`Marked ${status.toLowerCase()}`);
     setOpen(null);
     setComment("");

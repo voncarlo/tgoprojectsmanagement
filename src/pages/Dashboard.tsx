@@ -8,7 +8,7 @@ import {
   Sparkles, CalendarClock, ShieldCheck, Flame, Activity as ActivityIcon, Users2,
 } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, PieChart, Pie, Cell, BarChart, Bar, Legend, RadialBarChart, RadialBar } from "recharts";
-import { productivityTrend, teamWorkload, teams, priorityColor, approvals as seedApprovals } from "@/data/mock";
+import { productivityTrend, teams, priorityColor } from "@/data/mock";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/auth/AuthContext";
 import { useData } from "@/store/DataContext";
@@ -37,11 +37,18 @@ const Stat = ({ icon: Icon, label, value, delta, tone }: { icon: any; label: str
 
 const Dashboard = () => {
   const { visibleTeams, currentUser, isAdmin } = useAuth();
-  const { tasks, projects, notifications } = useData();
+  const { tasks, projects, notifications, approvals } = useData();
   const role = currentUser.role;
   const isExecutive = role === "Super Admin" || role === "Admin";
   const myTasks = tasks.filter(t => visibleTeams.includes(t.team));
   const myProjects = projects.filter(p => visibleTeams.includes(p.team));
+  const teamWorkload = teams
+    .filter((team) => visibleTeams.includes(team.id))
+    .map((team) => ({
+      team: team.name,
+      active: myTasks.filter((task) => task.team === team.id && task.status !== "Completed").length,
+      done: myTasks.filter((task) => task.team === team.id && task.status === "Completed").length,
+    }));
   const upcoming = [...myTasks].filter(t => t.status !== "Completed").sort((a, b) => a.due.localeCompare(b.due)).slice(0, 5);
   const activeProjects = myProjects.filter(p => p.status === "Active" || p.status === "At Risk").length;
   const pending = myTasks.filter(t => t.status !== "Completed").length;
@@ -51,7 +58,11 @@ const Dashboard = () => {
   const myAssignedTasks = tasks.filter(t => t.assignee === currentUser.name && t.status !== "Completed");
   const myUrgent = myAssignedTasks.filter(t => t.priority === "Urgent" || t.priority === "Critical");
   const myDueToday = myAssignedTasks.filter(t => t.due === todayIso);
-  const pendingApprovals = seedApprovals.filter(a => a.status === "Pending" || a.status === "Under Review");
+  const pendingApprovals = approvals.filter(
+    (approval) =>
+      visibleTeams.includes(approval.team) &&
+      (approval.status === "Pending" || approval.status === "Under Review")
+  );
   const teamUtil = Math.min(100, Math.round((pending / Math.max(1, pending + completed)) * 100));
   const healthSummary = [
     { name: "Healthy", value: myProjects.filter(p => p.status === "Active" || p.status === "Completed").length, fill: "hsl(var(--success))" },

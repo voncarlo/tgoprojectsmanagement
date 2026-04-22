@@ -9,15 +9,16 @@ import {
 } from "lucide-react";
 import { PageHeader } from "@/components/portal/PageHeader";
 import { StatTile } from "@/components/portal/StatTile";
-import { users, automations } from "@/data/mock";
 import { useAuth } from "@/auth/AuthContext";
 import { ALL_ROLES, CAPABILITY_GROUPS, ROLE_CAPABILITIES } from "@/auth/permissions";
 import { RoleBadge } from "@/components/rbac/RoleBadge";
 import { AccessDenied } from "@/components/rbac/AccessDenied";
 import { cn } from "@/lib/utils";
+import { useData } from "@/store/DataContext";
 
 const Admin = () => {
-  const { can } = useAuth();
+  const { can, userList } = useAuth();
+  const { automations, documents, auditLog } = useData();
   if (!can("admin.access")) return <AccessDenied module="Admin Panel" />;
 
   return (
@@ -25,10 +26,10 @@ const Admin = () => {
       <PageHeader title="Admin Panel" description="System-wide control, permissions, storage and audit." />
 
       <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
-        <StatTile label="Users" value={users.length} icon={Users} tone="text-primary" />
+        <StatTile label="Users" value={userList.length} icon={Users} tone="text-primary" />
         <StatTile label="Automations" value={automations.length} icon={Activity} tone="text-info" />
-        <StatTile label="Storage used" value="48%" icon={HardDrive} tone="text-warning" />
-        <StatTile label="System status" value="Healthy" icon={ShieldAlert} tone="text-success" />
+        <StatTile label="Documents" value={documents.length} icon={HardDrive} tone="text-warning" />
+        <StatTile label="Audit events" value={auditLog.length} icon={ShieldAlert} tone="text-success" />
       </div>
 
       {/* Permissions matrix */}

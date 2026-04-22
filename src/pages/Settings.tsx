@@ -43,7 +43,7 @@ const ROLE_DEFAULTS: Record<Role, ModuleKey[]> = {
 };
 
 const Settings = () => {
-  const { currentUser, setCurrentUser, isAdmin, isSuperAdmin, userList, setUserList } = useAuth();
+  const { currentUser, setCurrentUser, isAdmin, isSuperAdmin, userList, setUserList, updatePassword: savePassword } = useAuth();
 
   const [name, setName] = useState(currentUser.name);
   const [email, setEmail] = useState(currentUser.email);
@@ -80,6 +80,8 @@ const Settings = () => {
   const updatePassword = () => {
     if (pwdOld.length < 1) return toast.error("Enter your current password");
     if (pwdNew.length < 8) return toast.error("New password must be at least 8 characters");
+    const result = savePassword(pwdOld, pwdNew);
+    if (!result.ok) return toast.error(result.message ?? "Password update failed");
     setPwdOld(""); setPwdNew("");
     toast.success("Password updated");
   };

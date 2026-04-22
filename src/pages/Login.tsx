@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Mail, Lock, Eye, EyeOff, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,12 +8,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Logo } from "@/components/portal/Logo";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/auth/AuthContext";
-import { users as allUsers } from "@/data/mock";
-import { Mail, Lock, Eye, EyeOff, Loader2 } from "lucide-react";
 
 const Login = () => {
-  const { setCurrentUser, userList } = useAuth();
-  const list = userList.length ? userList : allUsers;
+  const { signIn } = useAuth();
   const navigate = useNavigate();
 
   const [email, setEmail] = useState("");
@@ -30,11 +28,13 @@ const Login = () => {
       return;
     }
     setLoading(true);
-    // Simulated auth — match by email if found, otherwise default to first user.
     setTimeout(() => {
-      const matched = list.find((u) => u.email.toLowerCase() === email.trim().toLowerCase());
-      setCurrentUser(matched ?? list[0]);
       setLoading(false);
+      const result = signIn(email, password);
+      if (!result.ok) {
+        setError(result.message ?? "Unable to sign in.");
+        return;
+      }
       navigate("/dashboard");
     }, 600);
   };
@@ -43,18 +43,15 @@ const Login = () => {
     <div className="min-h-screen w-full bg-muted/40 flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-md animate-fade-in">
         <div className="rounded-2xl border border-border bg-card shadow-soft p-8 sm:p-10 space-y-8">
-          {/* Branding */}
           <div className="flex justify-center">
             <Logo variant="default" size={56} />
           </div>
 
-          {/* Heading */}
           <div className="text-center space-y-2">
             <h1 className="text-3xl font-semibold tracking-tight text-foreground">Welcome back</h1>
             <p className="text-sm text-muted-foreground">Sign in to continue to your account</p>
           </div>
 
-          {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-5" noValidate>
             <div className="space-y-2">
               <Label htmlFor="email" className="text-sm font-medium">Email</Label>
@@ -87,7 +84,7 @@ const Login = () => {
                 />
                 <button
                   type="button"
-                  onClick={() => setShowPassword((s) => !s)}
+                  onClick={() => setShowPassword((value) => !value)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                   aria-label={showPassword ? "Hide password" : "Show password"}
                 >
@@ -104,7 +101,7 @@ const Login = () => {
               <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer select-none">
                 <Checkbox
                   checked={remember}
-                  onCheckedChange={(v) => setRemember(Boolean(v))}
+                  onCheckedChange={(value) => setRemember(Boolean(value))}
                   id="remember"
                 />
                 <span>Remember me</span>
@@ -127,7 +124,7 @@ const Login = () => {
               {loading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Signing in…
+                  Signing in...
                 </>
               ) : (
                 "Sign in to portal"
@@ -136,6 +133,9 @@ const Login = () => {
 
             <p className="text-center text-xs text-muted-foreground pt-2">
               Need access? <span className="font-medium text-primary">Contact your administrator.</span>
+            </p>
+            <p className="text-center text-[11px] text-muted-foreground">
+              Demo password: <span className="font-medium text-foreground">password123</span>
             </p>
           </form>
         </div>

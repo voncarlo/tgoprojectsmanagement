@@ -2,11 +2,12 @@ import { useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Search, Activity as ActivityIcon } from "lucide-react";
-import { auditLog, teams, type AuditEntry } from "@/data/mock";
+import { Search } from "lucide-react";
+import { teams, type AuditEntry } from "@/data/mock";
 import { PageHeader } from "@/components/portal/PageHeader";
 import { useAuth } from "@/auth/AuthContext";
 import { cn } from "@/lib/utils";
+import { useData } from "@/store/DataContext";
 
 const CAT_TONE: Record<AuditEntry["category"], string> = {
   Task: "bg-info/10 text-info border-info/20",
@@ -22,6 +23,7 @@ const CATS = ["All", "Task", "Project", "User", "File", "Approval", "Login", "Sy
 
 const ActivityLogs = () => {
   const { visibleTeams } = useAuth();
+  const { auditLog } = useData();
   const [q, setQ] = useState("");
   const [cat, setCat] = useState<typeof CATS[number]>("All");
 

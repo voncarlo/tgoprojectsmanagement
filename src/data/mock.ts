@@ -260,6 +260,7 @@ export interface Approval {
   requester: string;
   team: TeamId;
   status: ApprovalStatus;
+  taskId?: string;
   amount?: number;
   submitted: string;
   notes?: string;

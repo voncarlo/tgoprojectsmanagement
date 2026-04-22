@@ -1,14 +1,25 @@
-import { createContext, useCallback, useContext, useMemo, useState, ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   tasks as seedTasks,
   projects as seedProjects,
   activity as seedActivity,
+  approvals as seedApprovals,
+  documents as seedDocuments,
+  automations as seedAutomations,
+  auditLog as seedAuditLog,
+  calendarEvents as seedCalendarEvents,
   type Task,
   type Project,
   type Activity,
   type Milestone,
   type TaskApprovalStatus,
   type ApprovalHistoryEntry,
+  type Approval,
+  type ApprovalStatus,
+  type DocumentFile,
+  type AutomationRule,
+  type AuditEntry,
+  type CalendarEvent,
 } from "@/data/mock";
 import { useAuth } from "@/auth/AuthContext";
 
@@ -16,11 +27,27 @@ interface Notification extends Activity {
   read: boolean;
 }
 
+interface PersistedDataState {
+  tasks: Task[];
+  projects: Project[];
+  notifications: Notification[];
+  approvals: Approval[];
+  documents: DocumentFile[];
+  automations: AutomationRule[];
+  auditLog: AuditEntry[];
+  calendarEvents: CalendarEvent[];
+}
+
 interface DataCtx {
   tasks: Task[];
   projects: Project[];
   notifications: Notification[];
   unreadCount: number;
+  approvals: Approval[];
+  documents: DocumentFile[];
+  automations: AutomationRule[];
+  auditLog: AuditEntry[];
+  calendarEvents: CalendarEvent[];
   addTask: (t: Omit<Task, "id">) => Task;
   updateTask: (id: string, patch: Partial<Task>) => void;
   removeTask: (id: string) => void;
@@ -35,47 +62,137 @@ interface DataCtx {
     comment?: string
   ) => void;
   addTaskApprovalComment: (taskId: string, comment: string) => void;
+  decideApproval: (approvalId: string, status: ApprovalStatus, comment?: string) => void;
+  addDocument: (doc: Omit<DocumentFile, "id" | "updated" | "version"> & { version?: string }) => DocumentFile;
+  removeDocument: (id: string) => void;
+  toggleAutomation: (id: string) => void;
+  addCalendarEvent: (event: Omit<CalendarEvent, "id">) => CalendarEvent;
 }
 
+const STORAGE_KEY = "tgo.data";
 const Ctx = createContext<DataCtx | null>(null);
 
-const id = (p: string) => p + Math.random().toString(36).slice(2, 8);
-const now = () => "Just now";
+const id = (prefix: string) => prefix + Math.random().toString(36).slice(2, 8);
+const nowLabel = () => "Just now";
+const todayIso = () => new Date().toISOString().slice(0, 10);
+
+const defaultState: PersistedDataState = {
+  tasks: seedTasks,
+  projects: seedProjects,
+  notifications: seedActivity.map((item) => ({ ...item, read: false })),
+  approvals: seedApprovals,
+  documents: seedDocuments,
+  automations: seedAutomations,
+  auditLog: seedAuditLog,
+  calendarEvents: seedCalendarEvents,
+};
+
+const loadState = (): PersistedDataState => {
+  if (typeof window === "undefined") return defaultState;
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return defaultState;
+    const parsed = JSON.parse(raw) as Partial<PersistedDataState>;
+    return {
+      tasks: parsed.tasks?.length ? parsed.tasks : defaultState.tasks,
+      projects: parsed.projects?.length ? parsed.projects : defaultState.projects,
+      notifications: parsed.notifications?.length ? parsed.notifications : defaultState.notifications,
+      approvals: parsed.approvals?.length ? parsed.approvals : defaultState.approvals,
+      documents: parsed.documents?.length ? parsed.documents : defaultState.documents,
+      automations: parsed.automations?.length ? parsed.automations : defaultState.automations,
+      auditLog: parsed.auditLog?.length ? parsed.auditLog : defaultState.auditLog,
+      calendarEvents: parsed.calendarEvents?.length ? parsed.calendarEvents : defaultState.calendarEvents,
+    };
+  } catch {
+    return defaultState;
+  }
+};
+
+const recomputeProgress = (project: Project): Project => {
+  const total = project.milestones.length;
+  if (!total) return project;
+  const done = project.milestones.filter((milestone) => milestone.done).length;
+  return { ...project, progress: Math.round((done / total) * 100) };
+};
 
 export const DataProvider = ({ children }: { children: ReactNode }) => {
   const auth = useAuth();
-  const currentUser = auth.currentUser ?? { name: "System" } as any;
-  const [tasks, setTasks] = useState<Task[]>(seedTasks);
-  const [projects, setProjects] = useState<Project[]>(seedProjects);
-  const [notifications, setNotifications] = useState<Notification[]>(
-    seedActivity.map((a) => ({ ...a, read: false }))
-  );
+  const currentUser = auth.currentUser;
+  const initialState = loadState();
 
-  const pushActivity = useCallback((a: Omit<Activity, "id" | "time">) => {
-    setNotifications((n) => [{ ...a, id: id("a"), time: now(), read: false }, ...n].slice(0, 30));
+  const [tasks, setTasks] = useState<Task[]>(initialState.tasks);
+  const [projects, setProjects] = useState<Project[]>(initialState.projects);
+  const [notifications, setNotifications] = useState<Notification[]>(initialState.notifications);
+  const [approvals, setApprovals] = useState<Approval[]>(initialState.approvals);
+  const [documents, setDocuments] = useState<DocumentFile[]>(initialState.documents);
+  const [automations, setAutomations] = useState<AutomationRule[]>(initialState.automations);
+  const [auditLog, setAuditLog] = useState<AuditEntry[]>(initialState.auditLog);
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>(initialState.calendarEvents);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        tasks,
+        projects,
+        notifications,
+        approvals,
+        documents,
+        automations,
+        auditLog,
+        calendarEvents,
+      } satisfies PersistedDataState)
+    );
+  }, [tasks, projects, notifications, approvals, documents, automations, auditLog, calendarEvents]);
+
+  const appendAudit = useCallback((entry: Omit<AuditEntry, "id" | "time"> & { time?: string }) => {
+    setAuditLog((items) => [
+      { ...entry, id: id("al"), time: entry.time ?? nowLabel() },
+      ...items,
+    ].slice(0, 100));
   }, []);
 
+  const pushActivity = useCallback(
+    (activity: Omit<Activity, "id" | "time">) => {
+      setNotifications((items) => [{ ...activity, id: id("a"), time: nowLabel(), read: false }, ...items].slice(0, 30));
+    },
+    []
+  );
+
   const addTask: DataCtx["addTask"] = useCallback(
-    (t) => {
-      const next: Task = { ...t, id: id("t") };
-      setTasks((ts) => [next, ...ts]);
+    (taskInput) => {
+      const next: Task = {
+        ...taskInput,
+        id: id("t"),
+      };
+      setTasks((items) => [next, ...items]);
       pushActivity({ user: currentUser.name, action: "created task", target: next.title });
+      appendAudit({
+        user: currentUser.name,
+        action: "Created task",
+        target: next.title,
+        category: "Task",
+        team: next.team,
+      });
       return next;
     },
-    [currentUser.name, pushActivity]
+    [appendAudit, currentUser.name, pushActivity]
   );
 
   const updateTask: DataCtx["updateTask"] = useCallback(
     (taskId, patch) => {
-      setTasks((ts) =>
-        ts.map((t) => {
-          if (t.id !== taskId) return t;
-          let next: Task = { ...t, ...patch };
-          // Approval gate: when a task that requires approval is moved to Completed,
-          // intercept and route it to "Waiting Review" + Pending Approval instead.
+      let updatedTask: Task | null = null;
+      let submittedForApproval = false;
+
+      setTasks((items) =>
+        items.map((task) => {
+          if (task.id !== taskId) return task;
+
+          let next: Task = { ...task, ...patch };
           if (
             patch.status === "Completed" &&
-            t.status !== "Completed" &&
+            task.status !== "Completed" &&
             next.requiresApproval &&
             next.approver &&
             next.approvalStatus !== "Approved"
@@ -85,151 +202,379 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
               actor: currentUser.name,
               action: "Submitted",
               comment: "Submitted for approval",
-              at: now(),
+              at: nowLabel(),
             };
             next = {
               ...next,
               status: "Waiting Review",
               approvalStatus: "Pending Approval",
-              approvalHistory: [...(t.approvalHistory ?? []), entry],
+              approvalHistory: [...(task.approvalHistory ?? []), entry],
             };
-            pushActivity({
-              user: currentUser.name,
-              action: "submitted for approval",
-              target: `${t.title} → ${next.approver}`,
-            });
-          } else if (patch.status && patch.status !== t.status) {
-            pushActivity({
-              user: currentUser.name,
-              action: patch.status === "Completed" ? "completed task" : `moved to ${patch.status}`,
-              target: t.title,
-            });
+            submittedForApproval = true;
           }
+
+          updatedTask = next;
           return next;
         })
       );
+
+      if (!updatedTask) return;
+
+      if (submittedForApproval) {
+        pushActivity({
+          user: currentUser.name,
+          action: "submitted for approval",
+          target: `${updatedTask.title} -> ${updatedTask.approver}`,
+        });
+        appendAudit({
+          user: currentUser.name,
+          action: "Submitted for approval",
+          target: updatedTask.title,
+          category: "Approval",
+          team: updatedTask.team,
+        });
+        setApprovals((items) => {
+          const existing = items.find((item) => item.taskId === updatedTask?.id);
+          const nextApproval: Approval = {
+            id: existing?.id ?? id("ap"),
+            type: "Task",
+            title: updatedTask.title,
+            requester: updatedTask.assignee,
+            team: updatedTask.team,
+            status: "Pending",
+            submitted: todayIso(),
+            notes: updatedTask.notes,
+            taskId: updatedTask.id,
+          };
+          return existing
+            ? items.map((item) => (item.id === existing.id ? nextApproval : item))
+            : [nextApproval, ...items];
+        });
+        return;
+      }
+
+        if (patch.status) {
+          pushActivity({
+            user: currentUser.name,
+            action: patch.status === "Completed" ? "completed task" : `moved to ${patch.status}`,
+            target: updatedTask.title,
+        });
+        appendAudit({
+          user: currentUser.name,
+          action: `Updated task status to ${patch.status}`,
+          target: updatedTask.title,
+          category: "Task",
+          team: updatedTask.team,
+        });
+      }
     },
-    [currentUser.name, pushActivity]
+    [appendAudit, currentUser.name, pushActivity]
   );
 
-  const removeTask: DataCtx["removeTask"] = useCallback((taskId) => {
-    setTasks((ts) => ts.filter((t) => t.id !== taskId));
-  }, []);
-
-  const recomputeProgress = (p: Project): Project => {
-    const total = p.milestones.length;
-    if (!total) return p;
-    const done = p.milestones.filter((m) => m.done).length;
-    return { ...p, progress: Math.round((done / total) * 100) };
-  };
+  const removeTask: DataCtx["removeTask"] = useCallback(
+    (taskId) => {
+      const existing = tasks.find((task) => task.id === taskId);
+      setTasks((items) => items.filter((task) => task.id !== taskId));
+      setApprovals((items) => items.filter((approval) => approval.taskId !== taskId));
+      if (!existing) return;
+      appendAudit({
+        user: currentUser.name,
+        action: "Deleted task",
+        target: existing.title,
+        category: "Task",
+        team: existing.team,
+      });
+    },
+    [appendAudit, currentUser.name, tasks]
+  );
 
   const addProject: DataCtx["addProject"] = useCallback(
-    (p) => {
+    (projectInput) => {
       const next: Project = {
-        ...p,
+        ...projectInput,
         id: id("p"),
-        milestones: p.milestones ?? [
+        milestones: projectInput.milestones ?? [
           { name: "Kickoff", done: false },
           { name: "Build", done: false },
           { name: "Launch", done: false },
         ],
       };
-      const withProg = recomputeProgress(next);
-      setProjects((ps) => [withProg, ...ps]);
+      const withProgress = recomputeProgress(next);
+      setProjects((items) => [withProgress, ...items]);
       pushActivity({ user: currentUser.name, action: "created project", target: next.name });
-      return withProg;
+      appendAudit({
+        user: currentUser.name,
+        action: "Created project",
+        target: next.name,
+        category: "Project",
+        team: next.team,
+      });
+      return withProgress;
     },
-    [currentUser.name, pushActivity]
+    [appendAudit, currentUser.name, pushActivity]
   );
 
-  const updateProject: DataCtx["updateProject"] = useCallback((projectId, patch) => {
-    setProjects((ps) => ps.map((p) => (p.id === projectId ? recomputeProgress({ ...p, ...patch }) : p)));
-  }, []);
+  const updateProject: DataCtx["updateProject"] = useCallback(
+    (projectId, patch) => {
+      let updatedProject: Project | null = null;
+      setProjects((items) =>
+        items.map((project) => {
+          if (project.id !== projectId) return project;
+          updatedProject = recomputeProgress({ ...project, ...patch });
+          return updatedProject;
+        })
+      );
+      if (!updatedProject) return;
+      appendAudit({
+        user: currentUser.name,
+        action: "Updated project",
+        target: updatedProject.name,
+        category: "Project",
+        team: updatedProject.team,
+      });
+    },
+    [appendAudit, currentUser.name]
+  );
 
   const toggleMilestone: DataCtx["toggleMilestone"] = useCallback(
     (projectId, name) => {
-      setProjects((ps) =>
-        ps.map((p) => {
-          if (p.id !== projectId) return p;
-          const milestones = p.milestones.map((m) => (m.name === name ? { ...m, done: !m.done } : m));
-          const next = recomputeProgress({ ...p, milestones });
-          pushActivity({
-            user: currentUser.name,
-            action: milestones.find((m) => m.name === name)?.done ? "completed milestone" : "reopened milestone",
-            target: `${p.name} · ${name}`,
+      let updatedProject: Project | null = null;
+      let milestoneDone = false;
+
+      setProjects((items) =>
+        items.map((project) => {
+          if (project.id !== projectId) return project;
+          const milestones = project.milestones.map((milestone) => {
+            if (milestone.name !== name) return milestone;
+            milestoneDone = !milestone.done;
+            return { ...milestone, done: milestoneDone };
           });
-          return next;
+          updatedProject = recomputeProgress({ ...project, milestones });
+          return updatedProject;
         })
       );
+
+      if (!updatedProject) return;
+      pushActivity({
+        user: currentUser.name,
+        action: milestoneDone ? "completed milestone" : "reopened milestone",
+        target: `${updatedProject.name} · ${name}`,
+      });
+      appendAudit({
+        user: currentUser.name,
+        action: milestoneDone ? "Completed milestone" : "Reopened milestone",
+        target: `${updatedProject.name} · ${name}`,
+        category: "Project",
+        team: updatedProject.team,
+      });
     },
-    [currentUser.name, pushActivity]
+    [appendAudit, currentUser.name, pushActivity]
   );
 
   const markAllRead = useCallback(() => {
-    setNotifications((n) => n.map((x) => ({ ...x, read: true })));
+    setNotifications((items) => items.map((item) => ({ ...item, read: true })));
   }, []);
 
   const decideTaskApproval: DataCtx["decideTaskApproval"] = useCallback(
     (taskId, decision, comment) => {
-      setTasks((ts) =>
-        ts.map((t) => {
-          if (t.id !== taskId) return t;
+      let decidedTask: Task | null = null;
+      setTasks((items) =>
+        items.map((task) => {
+          if (task.id !== taskId) return task;
           const entry: ApprovalHistoryEntry = {
             id: id("h"),
             actor: currentUser.name,
             action: decision,
             comment,
-            at: now(),
+            at: nowLabel(),
           };
           const nextStatus: Task["status"] =
             decision === "Approved"
               ? "Completed"
               : decision === "Rejected"
-              ? "Cancelled"
-              : "In Progress";
-          return {
-            ...t,
+                ? "Cancelled"
+                : "In Progress";
+          decidedTask = {
+            ...task,
             status: nextStatus,
             approvalStatus: decision as TaskApprovalStatus,
-            approvalHistory: [...(t.approvalHistory ?? []), entry],
+            approvalHistory: [...(task.approvalHistory ?? []), entry],
           };
+          return decidedTask;
         })
       );
-      const target = tasks.find((x) => x.id === taskId);
-      if (target) {
-        pushActivity({
-          user: currentUser.name,
-          action:
-            decision === "Approved"
-              ? "approved task"
-              : decision === "Rejected"
+
+      if (!decidedTask) return;
+
+      const approvalStatusMap: Record<"Approved" | "Rejected" | "Returned for Revision", ApprovalStatus> = {
+        Approved: "Approved",
+        Rejected: "Rejected",
+        "Returned for Revision": "Returned",
+      };
+      setApprovals((items) =>
+        items.map((approval) =>
+          approval.taskId === taskId
+            ? { ...approval, status: approvalStatusMap[decision], notes: comment || approval.notes }
+            : approval
+        )
+      );
+      pushActivity({
+        user: currentUser.name,
+        action:
+          decision === "Approved"
+            ? "approved task"
+            : decision === "Rejected"
               ? "rejected task"
               : "returned task for revision",
-          target: target.title,
-        });
-      }
+        target: decidedTask.title,
+      });
+      appendAudit({
+        user: currentUser.name,
+        action: decision,
+        target: decidedTask.title,
+        category: "Approval",
+        team: decidedTask.team,
+      });
     },
-    [currentUser.name, pushActivity, tasks]
+    [appendAudit, currentUser.name, pushActivity]
   );
 
   const addTaskApprovalComment: DataCtx["addTaskApprovalComment"] = useCallback(
     (taskId, comment) => {
       if (!comment.trim()) return;
-      setTasks((ts) =>
-        ts.map((t) => {
-          if (t.id !== taskId) return t;
+      let commentedTask: Task | null = null;
+      setTasks((items) =>
+        items.map((task) => {
+          if (task.id !== taskId) return task;
           const entry: ApprovalHistoryEntry = {
             id: id("h"),
             actor: currentUser.name,
             action: "Comment",
             comment,
-            at: now(),
+            at: nowLabel(),
           };
-          return { ...t, approvalHistory: [...(t.approvalHistory ?? []), entry] };
+          commentedTask = { ...task, approvalHistory: [...(task.approvalHistory ?? []), entry] };
+          return commentedTask;
         })
       );
+      if (!commentedTask) return;
+      appendAudit({
+        user: currentUser.name,
+        action: "Commented on approval",
+        target: commentedTask.title,
+        category: "Approval",
+        team: commentedTask.team,
+      });
     },
-    [currentUser.name]
+    [appendAudit, currentUser.name]
+  );
+
+  const decideApproval: DataCtx["decideApproval"] = useCallback(
+    (approvalId, status, comment) => {
+      let updatedApproval: Approval | null = null;
+      setApprovals((items) =>
+        items.map((approval) => {
+          if (approval.id !== approvalId) return approval;
+          updatedApproval = { ...approval, status, notes: comment || approval.notes };
+          return updatedApproval;
+        })
+      );
+      if (!updatedApproval) return;
+      if (updatedApproval.taskId) {
+        const taskDecision =
+          status === "Approved"
+            ? "Approved"
+            : status === "Rejected"
+              ? "Rejected"
+              : status === "Returned"
+                ? "Returned for Revision"
+                : null;
+        if (taskDecision) decideTaskApproval(updatedApproval.taskId, taskDecision, comment);
+      }
+      appendAudit({
+        user: currentUser.name,
+        action: `Set approval to ${status}`,
+        target: updatedApproval.title,
+        category: "Approval",
+        team: updatedApproval.team,
+      });
+    },
+    [appendAudit, currentUser.name, decideTaskApproval]
+  );
+
+  const addDocument: DataCtx["addDocument"] = useCallback(
+    (doc) => {
+      const next: DocumentFile = {
+        ...doc,
+        id: id("d"),
+        updated: nowLabel(),
+        version: doc.version ?? "v1",
+      };
+      setDocuments((items) => [next, ...items]);
+      appendAudit({
+        user: currentUser.name,
+        action: "Uploaded",
+        target: next.name,
+        category: "File",
+        team: next.team,
+      });
+      pushActivity({ user: currentUser.name, action: "uploaded file", target: next.name });
+      return next;
+    },
+    [appendAudit, currentUser.name, pushActivity]
+  );
+
+  const removeDocument: DataCtx["removeDocument"] = useCallback(
+    (docId) => {
+      const existing = documents.find((doc) => doc.id === docId);
+      setDocuments((items) => items.filter((doc) => doc.id !== docId));
+      if (!existing) return;
+      appendAudit({
+        user: currentUser.name,
+        action: "Deleted",
+        target: existing.name,
+        category: "File",
+        team: existing.team,
+      });
+    },
+    [appendAudit, currentUser.name, documents]
+  );
+
+  const toggleAutomation: DataCtx["toggleAutomation"] = useCallback(
+    (automationId) => {
+      let updatedRule: AutomationRule | null = null;
+      setAutomations((items) =>
+        items.map((rule) => {
+          if (rule.id !== automationId) return rule;
+          updatedRule = { ...rule, enabled: !rule.enabled };
+          return updatedRule;
+        })
+      );
+      if (!updatedRule) return;
+      appendAudit({
+        user: currentUser.name,
+        action: updatedRule.enabled ? "Enabled automation" : "Paused automation",
+        target: updatedRule.name,
+        category: "System",
+      });
+    },
+    [appendAudit, currentUser.name]
+  );
+
+  const addCalendarEvent: DataCtx["addCalendarEvent"] = useCallback(
+    (event) => {
+      const next: CalendarEvent = { ...event, id: id("ev") };
+      setCalendarEvents((items) => [next, ...items]);
+      appendAudit({
+        user: currentUser.name,
+        action: "Created calendar event",
+        target: next.title,
+        category: "System",
+        team: next.team,
+      });
+      return next;
+    },
+    [appendAudit, currentUser.name]
   );
 
   const value = useMemo<DataCtx>(
@@ -237,7 +582,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       tasks,
       projects,
       notifications,
-      unreadCount: notifications.filter((n) => !n.read).length,
+      unreadCount: notifications.filter((notification) => !notification.read).length,
+      approvals,
+      documents,
+      automations,
+      auditLog,
+      calendarEvents,
       addTask,
       updateTask,
       removeTask,
@@ -248,8 +598,37 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       markAllRead,
       decideTaskApproval,
       addTaskApprovalComment,
+      decideApproval,
+      addDocument,
+      removeDocument,
+      toggleAutomation,
+      addCalendarEvent,
     }),
-    [tasks, projects, notifications, addTask, updateTask, removeTask, addProject, updateProject, toggleMilestone, pushActivity, markAllRead, decideTaskApproval, addTaskApprovalComment]
+    [
+      tasks,
+      projects,
+      notifications,
+      approvals,
+      documents,
+      automations,
+      auditLog,
+      calendarEvents,
+      addTask,
+      updateTask,
+      removeTask,
+      addProject,
+      updateProject,
+      toggleMilestone,
+      pushActivity,
+      markAllRead,
+      decideTaskApproval,
+      addTaskApprovalComment,
+      decideApproval,
+      addDocument,
+      removeDocument,
+      toggleAutomation,
+      addCalendarEvent,
+    ]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
