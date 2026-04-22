@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { MessageSquare, Minimize2, Paperclip, Pencil, Search, Send, Smile, Trash2, Users, X } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { MessageSquare, Minimize2, Paperclip, Pencil, Search, Send, Trash2, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
@@ -24,6 +24,8 @@ export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingBody, setEditingBody] = useState("");
   const [view, setView] = useState<"chats" | "contacts">("chats");
+  const [attachment, setAttachment] = useState<{ name: string; size: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const filteredContacts = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -60,9 +62,10 @@ export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
   );
 
   const submit = () => {
-    if (!selectedUser || !message.trim()) return;
-    sendChatMessage(selectedUser.id, message);
+    if (!selectedUser || (!message.trim() && !attachment)) return;
+    sendChatMessage(selectedUser.id, message, attachment ?? undefined);
     setMessage("");
+    setAttachment(null);
     toast.success(`Message sent to ${selectedUser.name}`);
   };
 
@@ -72,6 +75,15 @@ export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
     setEditingId(null);
     setEditingBody("");
     toast.success("Message updated");
+  };
+
+  const pickAttachment = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const sizeKb = Math.max(1, Math.round(file.size / 1024));
+    setAttachment({ name: file.name, size: `${sizeKb} KB` });
+    toast.success(`Attached ${file.name}`);
+    event.target.value = "";
   };
 
   if (!open) return null;
@@ -113,7 +125,7 @@ export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
                 const mine = entry.senderId === currentUser.id;
                 return (
                   <div key={entry.id} className={cn("flex", mine ? "justify-end" : "justify-start")}>
-                    <div className={cn("group max-w-[78%] rounded-2xl px-3 py-2 text-[12.5px]", mine ? "bg-primary text-primary-foreground" : "bg-muted")}>
+                    <div className={cn("group max-w-[76%] rounded-2xl px-3 py-2 text-[12px] leading-snug shadow-sm", mine ? "bg-primary text-primary-foreground" : "bg-muted")}>
                       {editingId === entry.id ? (
                         <div className="space-y-2">
                           <Textarea rows={2} value={editingBody} onChange={(event) => setEditingBody(event.target.value)} className="min-h-[64px] resize-none border-0 bg-transparent px-0 py-0 text-[12.5px] shadow-none focus-visible:ring-0" />
@@ -124,7 +136,13 @@ export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
                         </div>
                       ) : (
                         <>
-                          <p>{entry.body}</p>
+                          {entry.body ? <p>{entry.body}</p> : null}
+                          {entry.attachmentName && (
+                            <div className={cn("mt-1 rounded-xl border px-2.5 py-2 text-[11px]", mine ? "border-primary-foreground/15 bg-primary-foreground/10" : "border-border bg-background/70")}>
+                              <p className="font-medium">{entry.attachmentName}</p>
+                              <p className={cn("mt-0.5 text-[10px]", mine ? "text-primary-foreground/75" : "text-muted-foreground")}>{entry.attachmentSize ?? "Attachment"}</p>
+                            </div>
+                          )}
                           <div className="mt-1 flex items-center justify-between gap-2">
                             <p className={cn("text-[9px]", mine ? "text-primary-foreground/75" : "text-muted-foreground")}>
                               {new Date(entry.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
@@ -161,20 +179,29 @@ export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
 
           <div className="border-t border-border bg-background px-3 py-3">
             <div className="rounded-2xl border border-primary/30 bg-background p-2">
+              {attachment && (
+                <div className="mb-2 flex items-center justify-between rounded-xl bg-muted/50 px-2.5 py-2 text-[11px]">
+                  <div>
+                    <p className="font-medium">{attachment.name}</p>
+                    <p className="text-[10px] text-muted-foreground">{attachment.size}</p>
+                  </div>
+                  <button type="button" className="rounded p-1 text-muted-foreground hover:bg-muted" onClick={() => setAttachment(null)}>
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
               <Textarea
-                rows={2}
+                rows={1}
                 value={message}
                 onChange={(event) => setMessage(event.target.value)}
                 placeholder={`Message ${selectedUser.name}...`}
-                className="min-h-[74px] resize-none border-0 px-1 py-1 shadow-none focus-visible:ring-0"
+                className="min-h-[42px] resize-none border-0 px-1 py-1 text-[13px] shadow-none focus-visible:ring-0"
               />
               <div className="flex items-center justify-between pt-1">
                 <div className="flex items-center gap-1">
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
+                  <input ref={fileInputRef} type="file" className="hidden" onChange={pickAttachment} />
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={() => fileInputRef.current?.click()}>
                     <Paperclip className="h-4 w-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
-                    <Smile className="h-4 w-4" />
                   </Button>
                 </div>
                 <Button className="gradient-primary text-primary-foreground h-9 w-9 p-0" onClick={submit}>

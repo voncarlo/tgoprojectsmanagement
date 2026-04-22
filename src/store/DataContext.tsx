@@ -37,6 +37,8 @@ export interface ChatMessage {
   recipientId: string;
   recipientName: string;
   body: string;
+  attachmentName?: string;
+  attachmentSize?: string;
   createdAt: string;
   updatedAt?: string;
 }
@@ -113,7 +115,7 @@ interface DataCtx {
   purgeRecycleItem: (id: string) => void;
   toggleAutomation: (id: string) => void;
   addCalendarEvent: (event: Omit<CalendarEvent, "id">) => CalendarEvent;
-  sendChatMessage: (recipientId: string, body: string) => void;
+  sendChatMessage: (recipientId: string, body: string, attachment?: { name: string; size: string }) => void;
   updateChatMessage: (messageId: string, body: string) => void;
   removeChatMessage: (messageId: string) => void;
   addPersonalNote: (note: Omit<PersonalNote, "id" | "userId" | "createdAt" | "updatedAt">) => void;
@@ -813,9 +815,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   );
 
   const sendChatMessage: DataCtx["sendChatMessage"] = useCallback(
-    (recipientId, body) => {
+    (recipientId, body, attachment) => {
       const text = body.trim();
-      if (!text) return;
+      if (!text && !attachment) return;
       const recipient = auth.userList.find((user) => user.id === recipientId);
       if (!recipient) return;
       const message: ChatMessage = {
@@ -825,6 +827,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         recipientId: recipient.id,
         recipientName: recipient.name,
         body: text,
+        attachmentName: attachment?.name,
+        attachmentSize: attachment?.size,
         createdAt: new Date().toISOString(),
       };
       setChats((items) => [...items, message]);

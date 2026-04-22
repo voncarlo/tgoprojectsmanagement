@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Pencil, Send, Trash2 } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { Paperclip, Pencil, Send, Trash2, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -19,6 +19,8 @@ const Chat = () => {
   const [message, setMessage] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingBody, setEditingBody] = useState("");
+  const [attachment, setAttachment] = useState<{ name: string; size: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const selectedUser = contacts.find((user) => user.id === selectedId) ?? contacts[0] ?? null;
   const thread = useMemo(
@@ -33,9 +35,10 @@ const Chat = () => {
   );
 
   const submit = () => {
-    if (!selectedUser || !message.trim()) return;
-    sendChatMessage(selectedUser.id, message);
+    if (!selectedUser || (!message.trim() && !attachment)) return;
+    sendChatMessage(selectedUser.id, message, attachment ?? undefined);
     setMessage("");
+    setAttachment(null);
     toast.success(`Message sent to ${selectedUser.name}`);
   };
 
@@ -50,6 +53,15 @@ const Chat = () => {
     setEditingId(null);
     setEditingBody("");
     toast.success("Message updated");
+  };
+
+  const pickAttachment = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const sizeKb = Math.max(1, Math.round(file.size / 1024));
+    setAttachment({ name: file.name, size: `${sizeKb} KB` });
+    toast.success(`Attached ${file.name}`);
+    event.target.value = "";
   };
 
   return (
@@ -107,7 +119,7 @@ const Chat = () => {
                   const mine = entry.senderId === currentUser.id;
                   return (
                     <div key={entry.id} className={cn("flex", mine ? "justify-end" : "justify-start")}>
-                      <div className={cn("group max-w-[72%] rounded-2xl px-3 py-2 text-[13px]", mine ? "bg-primary text-primary-foreground" : "bg-muted")}>
+                      <div className={cn("group max-w-[66%] rounded-2xl px-3 py-2 text-[12px] leading-snug shadow-sm", mine ? "bg-primary text-primary-foreground" : "bg-muted")}>
                         {editingId === entry.id ? (
                           <div className="space-y-2">
                             <Textarea rows={2} value={editingBody} onChange={(event) => setEditingBody(event.target.value)} className="min-h-[70px] resize-none border-0 bg-transparent px-0 py-0 shadow-none focus-visible:ring-0" />
@@ -118,7 +130,13 @@ const Chat = () => {
                           </div>
                         ) : (
                           <>
-                            <p>{entry.body}</p>
+                            {entry.body ? <p>{entry.body}</p> : null}
+                            {entry.attachmentName && (
+                              <div className={cn("mt-1 rounded-xl border px-2.5 py-2 text-[11px]", mine ? "border-primary-foreground/15 bg-primary-foreground/10" : "border-border bg-background/70")}>
+                                <p className="font-medium">{entry.attachmentName}</p>
+                                <p className={cn("mt-0.5 text-[10px]", mine ? "text-primary-foreground/75" : "text-muted-foreground")}>{entry.attachmentSize ?? "Attachment"}</p>
+                              </div>
+                            )}
                             <div className="mt-1.5 flex items-center justify-between gap-3">
                               <p className={cn("text-[10px]", mine ? "text-primary-foreground/80" : "text-muted-foreground")}>
                                 {new Date(entry.createdAt).toLocaleString()}
@@ -154,17 +172,36 @@ const Chat = () => {
             </div>
 
             <div className="border-t border-border p-4">
-              <div className="flex gap-3">
+              <div className="rounded-2xl border border-primary/30 bg-background p-2.5">
+                {attachment && (
+                  <div className="mb-2 flex items-center justify-between rounded-xl bg-muted/50 px-2.5 py-2 text-[11px]">
+                    <div>
+                      <p className="font-medium">{attachment.name}</p>
+                      <p className="text-[10px] text-muted-foreground">{attachment.size}</p>
+                    </div>
+                    <button type="button" className="rounded p-1 text-muted-foreground hover:bg-muted" onClick={() => setAttachment(null)}>
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
                 <Textarea
-                  rows={3}
+                  rows={1}
                   value={message}
                   onChange={(event) => setMessage(event.target.value)}
                   placeholder={`Message ${selectedUser?.name ?? "teammate"}...`}
+                  className="min-h-[44px] resize-none border-0 px-1 py-1 text-[13px] shadow-none focus-visible:ring-0"
                 />
-                <Button className="gradient-primary text-primary-foreground self-end gap-1.5" onClick={submit}>
-                  <Send className="h-4 w-4" />
-                  Send
-                </Button>
+                <div className="flex items-center justify-between pt-1">
+                  <div className="flex items-center gap-1">
+                    <input ref={fileInputRef} type="file" className="hidden" onChange={pickAttachment} />
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" onClick={() => fileInputRef.current?.click()}>
+                      <Paperclip className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <Button className="gradient-primary text-primary-foreground h-9 w-9 p-0" onClick={submit}>
+                    <Send className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             </div>
           </Card>
