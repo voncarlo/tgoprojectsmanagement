@@ -108,10 +108,18 @@ export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
 
   if (!open) return null;
 
+  const panelWidth = 332;
+  const panelGap = 24;
+  const launcherRight = 16;
+  const conversationRight = launcherRight + panelWidth + panelGap;
+
   return (
     <>
       {selectedUser && (
-        <div className="fixed bottom-4 right-[348px] z-40 hidden w-[332px] overflow-hidden rounded-2xl border border-border bg-card shadow-[0_20px_50px_rgba(0,0,0,0.2)] md:flex md:flex-col">
+        <div
+          className="fixed bottom-4 z-30 hidden w-[332px] overflow-hidden rounded-2xl border border-border bg-card shadow-[0_20px_50px_rgba(0,0,0,0.2)] md:flex md:flex-col"
+          style={{ right: `${conversationRight}px` }}
+        >
           <div className="border-b border-border bg-muted/25 px-4 py-3">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3 min-w-0">
@@ -240,7 +248,10 @@ export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
         </div>
       )}
 
-      <div className="fixed bottom-4 right-4 z-40 hidden w-[332px] overflow-hidden rounded-2xl border border-border bg-card shadow-[0_20px_50px_rgba(0,0,0,0.18)] md:flex md:flex-col">
+      <div
+        className="fixed bottom-4 z-40 hidden w-[332px] overflow-hidden rounded-2xl border border-border bg-card shadow-[0_20px_50px_rgba(0,0,0,0.18)] md:flex md:flex-col"
+        style={{ right: `${launcherRight}px` }}
+      >
         <div className="border-b border-border bg-muted/25 px-4 py-3">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-3">
