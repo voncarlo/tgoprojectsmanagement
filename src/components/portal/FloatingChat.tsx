@@ -24,8 +24,19 @@ export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingBody, setEditingBody] = useState("");
   const [view, setView] = useState<"chats" | "contacts">("chats");
-  const [attachment, setAttachment] = useState<{ name: string; size: string } | null>(null);
+  const [attachment, setAttachment] = useState<{ name: string; size: string; dataUrl?: string; mimeType?: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const downloadAttachment = (name: string, dataUrl?: string) => {
+    if (!dataUrl) {
+      toast.error("This attachment is not available to download.");
+      return;
+    }
+    const link = document.createElement("a");
+    link.href = dataUrl;
+    link.download = name;
+    link.click();
+  };
 
   const filteredContacts = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -80,10 +91,19 @@ export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
   const pickAttachment = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    const sizeKb = Math.max(1, Math.round(file.size / 1024));
-    setAttachment({ name: file.name, size: `${sizeKb} KB` });
-    toast.success(`Attached ${file.name}`);
-    event.target.value = "";
+    const reader = new FileReader();
+    reader.onload = () => {
+      const sizeKb = Math.max(1, Math.round(file.size / 1024));
+      setAttachment({
+        name: file.name,
+        size: `${sizeKb} KB`,
+        dataUrl: typeof reader.result === "string" ? reader.result : undefined,
+        mimeType: file.type,
+      });
+      toast.success(`Attached ${file.name}`);
+      event.target.value = "";
+    };
+    reader.readAsDataURL(file);
   };
 
   if (!open) return null;
@@ -138,10 +158,17 @@ export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
                         <>
                           {entry.body ? <p>{entry.body}</p> : null}
                           {entry.attachmentName && (
-                            <div className={cn("mt-1 rounded-xl border px-2.5 py-2 text-[11px]", mine ? "border-primary-foreground/15 bg-primary-foreground/10" : "border-border bg-background/70")}>
+                            <button
+                              type="button"
+                              onClick={() => downloadAttachment(entry.attachmentName!, entry.attachmentDataUrl)}
+                              className={cn(
+                                "mt-1 block w-full rounded-xl border px-2.5 py-2 text-left text-[11px]",
+                                mine ? "border-primary-foreground/15 bg-primary-foreground/10" : "border-border bg-background/70"
+                              )}
+                            >
                               <p className="font-medium">{entry.attachmentName}</p>
                               <p className={cn("mt-0.5 text-[10px]", mine ? "text-primary-foreground/75" : "text-muted-foreground")}>{entry.attachmentSize ?? "Attachment"}</p>
-                            </div>
+                            </button>
                           )}
                           <div className="mt-1 flex items-center justify-between gap-2">
                             <p className={cn("text-[9px]", mine ? "text-primary-foreground/75" : "text-muted-foreground")}>

@@ -4,7 +4,7 @@ import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ensureSchema, getPool, hasDatabaseConfig } from "./server/db.mjs";
-import { listProjects, listTasks, listUsers, seedDatabase } from "./server/repository.mjs";
+import { getStateSnapshot, listProjects, listTasks, listUsers, saveStateSnapshot, seedDatabase } from "./server/repository.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -34,6 +34,13 @@ const sendJson = (res, statusCode, payload) => {
   res.end(JSON.stringify(payload));
 };
 
+const readJsonBody = async (req) => {
+  const chunks = [];
+  for await (const chunk of req) chunks.push(chunk);
+  const raw = Buffer.concat(chunks).toString("utf8");
+  return raw ? JSON.parse(raw) : {};
+};
+
 const sendFile = (res, filePath) => {
   const ext = path.extname(filePath).toLowerCase();
   res.writeHead(200, {
@@ -60,6 +67,30 @@ const handleApiRequest = async (req, res, pathname) => {
 
   if (pathname === "/api/users") {
     sendJson(res, 200, { ok: true, data: await listUsers() });
+    return true;
+  }
+
+  if (pathname === "/api/state/auth" && req.method === "GET") {
+    sendJson(res, 200, { ok: true, data: await getStateSnapshot("auth") });
+    return true;
+  }
+
+  if (pathname === "/api/state/auth" && req.method === "PUT") {
+    const body = await readJsonBody(req);
+    await saveStateSnapshot("auth", body);
+    sendJson(res, 200, { ok: true });
+    return true;
+  }
+
+  if (pathname === "/api/state/app" && req.method === "GET") {
+    sendJson(res, 200, { ok: true, data: await getStateSnapshot("app") });
+    return true;
+  }
+
+  if (pathname === "/api/state/app" && req.method === "PUT") {
+    const body = await readJsonBody(req);
+    await saveStateSnapshot("app", body);
+    sendJson(res, 200, { ok: true });
     return true;
   }
 

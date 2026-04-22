@@ -32,6 +32,21 @@ interface PersistedAuthState {
   userList: User[];
 }
 
+const fetchServerState = async (): Promise<PersistedAuthState | null> => {
+  const response = await fetch("/api/state/auth");
+  if (!response.ok) return null;
+  const payload = (await response.json()) as { ok: boolean; data?: PersistedAuthState | null };
+  return payload.data ?? null;
+};
+
+const saveServerState = async (state: PersistedAuthState) => {
+  await fetch("/api/state/auth", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(state),
+  });
+};
+
 const STORAGE_KEY = "tgo.auth";
 const REMEMBER_EMAIL_KEY = "tgo.auth.rememberedEmail";
 const STORAGE_VERSION = 5;
@@ -136,6 +151,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [userList, setUserList] = useState<User[]>(initialState.userList);
   const [currentUserId, setCurrentUserId] = useState<string>(initialState.currentUserId);
   const [passwords, setPasswords] = useState<Record<string, string>>(initialState.passwords);
+  const [serverHydrated, setServerHydrated] = useState(false);
   const [rememberedEmail, setRememberedEmail] = useState<string>(() => {
     if (typeof window === "undefined") return "";
     return window.localStorage.getItem(REMEMBER_EMAIL_KEY) ?? "";
@@ -172,6 +188,41 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       } satisfies PersistedAuthState)
     );
   }, [currentUserId, passwords, userList]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const hydrate = async () => {
+      try {
+        const remoteState = await fetchServerState();
+        if (!remoteState || cancelled) return;
+        const mergedUsers = mergeUsers(remoteState.userList);
+        const hasCurrent = mergedUsers.some((user) => user.id === remoteState.currentUserId);
+        setUserList(mergedUsers);
+        setPasswords({ ...defaultPasswords, ...(remoteState.passwords ?? {}) });
+        setCurrentUserId(hasCurrent ? remoteState.currentUserId : mergedUsers[0]?.id ?? defaultAuthState.currentUserId);
+      } catch {
+        // Fallback to local storage state when the API is unavailable.
+      } finally {
+        if (!cancelled) setServerHydrated(true);
+      }
+    };
+
+    void hydrate();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!serverHydrated) return;
+    void saveServerState({
+      version: STORAGE_VERSION,
+      currentUserId,
+      passwords,
+      userList,
+    });
+  }, [currentUserId, passwords, serverHydrated, userList]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;

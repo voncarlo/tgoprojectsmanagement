@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { FileText, Search, Upload, Download, FolderOpen, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +37,9 @@ const Documents = () => {
   const [category, setCategory] = useState<DocumentFile["category"]>("Project");
   const [teamId, setTeamId] = useState(visibleTeams[0] ?? currentUser.team);
   const [size, setSize] = useState("250 KB");
+  const [fileDataUrl, setFileDataUrl] = useState("");
+  const [fileMimeType, setFileMimeType] = useState("");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const filtered = useMemo(() => documents.filter((doc) =>
     visibleTeams.includes(doc.team) &&
@@ -59,13 +62,45 @@ const Documents = () => {
       size,
       owner: currentUser.name,
       team: teamId,
+      fileDataUrl: fileDataUrl || undefined,
+      fileMimeType: fileMimeType || undefined,
     });
     setName("");
     setCategory("Project");
     setTeamId(visibleTeams[0] ?? currentUser.team);
     setSize("250 KB");
+    setFileDataUrl("");
+    setFileMimeType("");
     setOpen(false);
     toast.success("Document added");
+  };
+
+  const onFilePick = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === "string" ? reader.result : "";
+      setFileDataUrl(dataUrl);
+      setFileMimeType(file.type);
+      setName(file.name);
+      const sizeKb = file.size / 1024;
+      setSize(sizeKb >= 1024 ? `${(sizeKb / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(sizeKb))} KB`);
+      toast.success(`${file.name} attached`);
+    };
+    reader.readAsDataURL(file);
+    event.target.value = "";
+  };
+
+  const downloadDocument = (doc: DocumentFile) => {
+    if (!doc.fileDataUrl) {
+      toast.error("No file payload saved for this document yet.");
+      return;
+    }
+    const link = document.createElement("a");
+    link.href = doc.fileDataUrl;
+    link.download = doc.name;
+    link.click();
   };
 
   return (
@@ -139,7 +174,7 @@ const Documents = () => {
                     <td className="p-3 text-xs text-muted-foreground">{doc.version}</td>
                     <td className="p-3 text-xs text-muted-foreground">{doc.updated}</td>
                     <td className="p-3 text-right">
-                      <Button variant="ghost" size="icon" className="h-7 w-7"><Download className="h-3.5 w-3.5" /></Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => downloadDocument(doc)}><Download className="h-3.5 w-3.5" /></Button>
                       {canDeleteDocument && (
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => {
                           const confirmed = window.confirm(`Delete "${doc.name}"? This cannot be undone.`);
@@ -163,7 +198,17 @@ const Documents = () => {
             <DialogTitle>Upload document</DialogTitle>
             <DialogDescription>Add a document record to the portal.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
+            <div className="space-y-3">
+            <div className="space-y-2">
+              <Label>File</Label>
+              <div className="flex items-center gap-2">
+                <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()}>
+                  Choose file
+                </Button>
+                <input ref={fileInputRef} type="file" className="hidden" onChange={onFilePick} />
+                <span className="text-xs text-muted-foreground">{name || "No file selected"}</span>
+              </div>
+            </div>
             <div className="space-y-2">
               <Label>Name</Label>
               <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Q2 operations report.pdf" />

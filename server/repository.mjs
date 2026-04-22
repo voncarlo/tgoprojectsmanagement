@@ -143,3 +143,18 @@ export const listProjects = async () => {
   const rows = await query("SELECT * FROM projects ORDER BY created_at DESC");
   return rows.map(mapProjectRow);
 };
+
+export const getStateSnapshot = async (stateKey) => {
+  const rows = await query("SELECT state_json FROM state_snapshots WHERE state_key = ? LIMIT 1", [stateKey]);
+  if (!rows[0]?.state_json) return null;
+  return parseJson(rows[0].state_json, null);
+};
+
+export const saveStateSnapshot = async (stateKey, payload) => {
+  await query(
+    `INSERT INTO state_snapshots (state_key, state_json)
+     VALUES (?, ?)
+     ON DUPLICATE KEY UPDATE state_json = VALUES(state_json)`,
+    [stateKey, JSON.stringify(payload)]
+  );
+};

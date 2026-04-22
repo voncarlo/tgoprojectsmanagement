@@ -308,6 +308,8 @@ export interface DocumentFile {
   team: TeamId;
   updated: string;
   version: string;
+  fileDataUrl?: string;
+  fileMimeType?: string;
 }
 
 export const documents: DocumentFile[] = [

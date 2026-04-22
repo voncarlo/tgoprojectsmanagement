@@ -40,6 +40,8 @@ export interface ChatMessage {
   body: string;
   attachmentName?: string;
   attachmentSize?: string;
+  attachmentDataUrl?: string;
+  attachmentMimeType?: string;
   createdAt: string;
   updatedAt?: string;
 }
@@ -54,6 +56,21 @@ export interface PersonalNote {
   createdAt: string;
   updatedAt: string;
 }
+
+const fetchServerState = async (): Promise<PersistedDataState | null> => {
+  const response = await fetch("/api/state/app");
+  if (!response.ok) return null;
+  const payload = (await response.json()) as { ok: boolean; data?: PersistedDataState | null };
+  return payload.data ?? null;
+};
+
+const saveServerState = async (state: PersistedDataState) => {
+  await fetch("/api/state/app", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(state),
+  });
+};
 
 export interface RecycleBinItem {
   id: string;
@@ -117,7 +134,11 @@ interface DataCtx {
   purgeRecycleItem: (id: string) => void;
   toggleAutomation: (id: string) => void;
   addCalendarEvent: (event: Omit<CalendarEvent, "id">) => CalendarEvent;
-  sendChatMessage: (recipientId: string, body: string, attachment?: { name: string; size: string }) => void;
+  sendChatMessage: (
+    recipientId: string,
+    body: string,
+    attachment?: { name: string; size: string; dataUrl?: string; mimeType?: string }
+  ) => void;
   updateChatMessage: (messageId: string, body: string) => void;
   removeChatMessage: (messageId: string) => void;
   addPersonalNote: (note: Omit<PersonalNote, "id" | "userId" | "createdAt" | "updatedAt">) => void;
@@ -213,6 +234,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [recycleBin, setRecycleBin] = useState<RecycleBinItem[]>(initialState.recycleBin);
   const [chats, setChats] = useState<ChatMessage[]>(initialState.chats);
   const [personalNotes, setPersonalNotes] = useState<PersonalNote[]>(initialState.personalNotes);
+  const [serverHydrated, setServerHydrated] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -233,6 +255,54 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       } satisfies PersistedDataState)
     );
   }, [tasks, projects, notifications, approvals, documents, automations, auditLog, calendarEvents, recycleBin, chats, personalNotes]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const hydrate = async () => {
+      try {
+        const remoteState = await fetchServerState();
+        if (!remoteState || cancelled) return;
+        setTasks(remoteState.tasks ?? defaultState.tasks);
+        setProjects(remoteState.projects ?? defaultState.projects);
+        setNotifications(remoteState.notifications ?? defaultState.notifications);
+        setApprovals(remoteState.approvals ?? defaultState.approvals);
+        setDocuments(remoteState.documents ?? defaultState.documents);
+        setAutomations(remoteState.automations ?? defaultState.automations);
+        setAuditLog(remoteState.auditLog ?? defaultState.auditLog);
+        setCalendarEvents(remoteState.calendarEvents ?? defaultState.calendarEvents);
+        setRecycleBin(remoteState.recycleBin ?? []);
+        setChats(remoteState.chats ?? []);
+        setPersonalNotes(remoteState.personalNotes ?? []);
+      } catch {
+        // Fallback to local cache when the API is unavailable.
+      } finally {
+        if (!cancelled) setServerHydrated(true);
+      }
+    };
+
+    void hydrate();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!serverHydrated) return;
+    void saveServerState({
+      tasks,
+      projects,
+      notifications,
+      approvals,
+      documents,
+      automations,
+      auditLog,
+      calendarEvents,
+      recycleBin,
+      chats,
+      personalNotes,
+    });
+  }, [approvals, auditLog, automations, calendarEvents, chats, documents, notifications, personalNotes, projects, recycleBin, serverHydrated, tasks]);
 
   useEffect(() => {
     const notificationsEnabled = currentUser.notificationSettings?.enabled ?? true;
@@ -851,6 +921,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         body: text,
         attachmentName: attachment?.name,
         attachmentSize: attachment?.size,
+        attachmentDataUrl: attachment?.dataUrl,
+        attachmentMimeType: attachment?.mimeType,
         createdAt: new Date().toISOString(),
       };
       setChats((items) => [...items, message]);
