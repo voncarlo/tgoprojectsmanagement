@@ -16,6 +16,7 @@ import { useAuth } from "@/auth/AuthContext";
 import { useData } from "@/store/DataContext";
 import { QuickAddDialog } from "@/components/portal/QuickAddDialog";
 import { CommandPalette } from "@/components/portal/CommandPalette";
+import { FloatingChat } from "@/components/portal/FloatingChat";
 import { useTheme } from "@/hooks/use-theme";
 import { toast } from "sonner";
 import { RoleBadge } from "@/components/rbac/RoleBadge";
@@ -59,6 +60,7 @@ export const Topbar = () => {
   const [quickOpen, setQuickOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [floatingChatOpen, setFloatingChatOpen] = useState(false);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -114,7 +116,7 @@ export const Topbar = () => {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => navigate("/chat")}
+            onClick={() => setFloatingChatOpen((open) => !open)}
             aria-label="Open chat"
             title="Open chat"
           >
@@ -198,6 +200,7 @@ export const Topbar = () => {
       <QuickAddDialog open={quickOpen} onOpenChange={setQuickOpen} />
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} onQuickAdd={() => setQuickOpen(true)} />
       <MobileSidebar open={mobileNavOpen} onOpenChange={setMobileNavOpen} />
+      <FloatingChat open={floatingChatOpen} onOpenChange={setFloatingChatOpen} />
     </>
   );
 };
