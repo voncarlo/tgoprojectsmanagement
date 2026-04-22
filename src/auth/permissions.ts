@@ -1,4 +1,5 @@
 import type { ModuleKey, Role } from "@/data/mock";
+import type { TeamId } from "@/data/mock";
 
 /**
  * Capability-based RBAC.
@@ -103,6 +104,15 @@ export const ROLE_MODULES: Record<Role, ModuleKey[]> = {
 
 /** Modules that should ONLY ever be reachable by Admin-level roles. */
 export const ADMIN_ONLY_MODULES: ModuleKey[] = ["users", "recycle", "admin", "automations"];
+
+export const DEPARTMENT_MODULE_TO_TEAM: Partial<Record<ModuleKey, TeamId>> = {
+  dispatch: "dispatch",
+  recruitment: "recruitment",
+  sales: "sales",
+  payroll: "payroll",
+  bookkeeping: "bookkeeping",
+  clients: "clients",
+};
 
 /** Friendly labels for the matrix table. */
 export const CAPABILITY_GROUPS: { group: string; caps: { id: Capability; label: string }[] }[] = [

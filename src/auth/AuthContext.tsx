@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { users as seedUsers, type User, type ModuleKey, type TeamId, type NotificationSettings } from "@/data/mock";
-import { ROLE_CAPABILITIES, ROLE_MODULES, ADMIN_ONLY_MODULES, type Capability } from "./permissions";
+import { ROLE_CAPABILITIES, ROLE_MODULES, ADMIN_ONLY_MODULES, DEPARTMENT_MODULE_TO_TEAM, type Capability } from "./permissions";
 
 interface AuthCtx {
   currentUser: User;
@@ -74,6 +74,15 @@ const FALLBACK_ROLE: User["role"] = "Staff";
 const ALL_TEAMS: TeamId[] = ["dispatch", "recruitment", "sales", "clients", "projects", "payroll", "bookkeeping"];
 
 const unique = <T,>(items: T[]) => [...new Set(items)];
+
+const getAssignedTeams = (user: User): TeamId[] => {
+  const normalizedTeams = unique(
+    (user.teams?.filter((team): team is TeamId => ALL_TEAMS.includes(team)) ?? []).concat(
+      ALL_TEAMS.includes(user.team) ? user.team : []
+    )
+  );
+  return normalizedTeams.length > 0 ? normalizedTeams : ["projects"];
+};
 
 const normalizeUser = (user: User): User => {
   const role = VALID_ROLES.has(user.role) ? user.role : FALLBACK_ROLE;
@@ -241,6 +250,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const isManager = isAdmin || currentUser.role === "Manager";
     const capabilities = ROLE_CAPABILITIES[currentUser.role] ?? [];
     const userModules = currentUser.modules?.length ? currentUser.modules : ROLE_MODULES[currentUser.role];
+    const visibleTeams = isSuperAdmin ? ALL_TEAMS : getAssignedTeams(currentUser);
 
     return {
       currentUser,
@@ -266,10 +276,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       canAccess: (module) => {
         if (isSuperAdmin) return true;
         if (ADMIN_ONLY_MODULES.includes(module) && !isAdmin) return false;
+        const requiredTeam = DEPARTMENT_MODULE_TO_TEAM[module];
+        if (requiredTeam && !visibleTeams.includes(requiredTeam)) return false;
         return userModules.includes(module);
       },
-      canSeeTeam: () => true,
-      visibleTeams: ["dispatch", "recruitment", "sales", "clients", "projects", "payroll", "bookkeeping"] as TeamId[],
+      canSeeTeam: (team) => visibleTeams.includes(team),
+      visibleTeams,
       signIn: (email, password, options) => {
         const normalizedEmail = email.trim().toLowerCase();
         const account = userList.find((user) => user.email.toLowerCase() === normalizedEmail);
