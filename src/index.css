@@ -1,0 +1,174 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    /* TGO Projects Portal — Navy corporate palette */
+    --background: 210 30% 97%;
+    --foreground: 213 41% 14%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 213 41% 14%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 213 41% 14%;
+
+    --primary: 119 30% 57%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 119 38% 70%;
+
+    --secondary: 119 25% 94%;
+    --secondary-foreground: 210 65% 8%;
+
+    --muted: 210 25% 94%;
+    --muted-foreground: 213 15% 45%;
+
+    --accent: 119 30% 57%;
+    --accent-foreground: 0 0% 100%;
+
+    /* Brand-locked semantic tones (green + dark navy + neutrals) */
+    --success: 119 30% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 210 18% 48%;
+    --warning-foreground: 0 0% 100%;
+    --info: 210 65% 18%;
+    --info-foreground: 0 0% 100%;
+
+    --destructive: 0 55% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 213 25% 88%;
+    --input: 213 25% 90%;
+    --ring: 119 30% 57%;
+
+    --radius: 0.75rem;
+
+    --gradient-primary: linear-gradient(135deg, hsl(119 32% 47%), hsl(119 38% 65%));
+    --gradient-hero: linear-gradient(135deg, hsl(210 65% 8%) 0%, hsl(210 55% 16%) 55%, hsl(119 30% 45%) 100%);
+    --gradient-accent: linear-gradient(135deg, hsl(119 30% 57%), hsl(140 35% 55%));
+    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(210 30% 98%) 100%);
+
+    --shadow-sm: 0 1px 2px hsl(213 41% 14% / 0.05);
+    --shadow-md: 0 4px 12px -2px hsl(213 41% 14% / 0.08);
+    --shadow-lg: 0 12px 32px -8px hsl(213 41% 14% / 0.18);
+    --shadow-glow: 0 0 40px hsl(119 38% 60% / 0.35);
+
+    --transition-smooth: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+
+    --sidebar-background: 210 65% 8%;
+    --sidebar-foreground: 210 25% 88%;
+    --sidebar-primary: 119 30% 57%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 50% 14%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 210 45% 18%;
+    --sidebar-ring: 119 30% 57%;
+  }
+
+  .dark {
+    /* TGO Projects Portal — Dark mode (navy night) */
+    --background: 213 40% 8%;
+    --foreground: 210 30% 95%;
+
+    --card: 213 38% 11%;
+    --card-foreground: 210 30% 95%;
+
+    --popover: 213 38% 11%;
+    --popover-foreground: 210 30% 95%;
+
+    --primary: 119 32% 60%;
+    --primary-foreground: 210 65% 8%;
+    --primary-glow: 119 40% 72%;
+
+    --secondary: 210 40% 16%;
+    --secondary-foreground: 210 25% 95%;
+
+    --muted: 213 28% 15%;
+    --muted-foreground: 213 15% 65%;
+
+    --accent: 119 32% 60%;
+    --accent-foreground: 210 65% 8%;
+
+    --success: 119 35% 50%;
+    --success-foreground: 0 0% 100%;
+    --warning: 210 15% 60%;
+    --warning-foreground: 210 65% 8%;
+    --info: 210 55% 70%;
+    --info-foreground: 210 65% 8%;
+
+    --destructive: 0 60% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 213 28% 20%;
+    --input: 213 28% 18%;
+    --ring: 119 32% 60%;
+
+    --gradient-primary: linear-gradient(135deg, hsl(119 32% 45%), hsl(119 40% 62%));
+    --gradient-hero: linear-gradient(135deg, hsl(210 65% 6%) 0%, hsl(210 55% 14%) 55%, hsl(119 32% 40%) 100%);
+    --gradient-accent: linear-gradient(135deg, hsl(119 32% 55%), hsl(140 40% 55%));
+    --gradient-card: linear-gradient(180deg, hsl(213 38% 12%) 0%, hsl(213 35% 10%) 100%);
+
+    --shadow-sm: 0 1px 2px hsl(0 0% 0% / 0.3);
+    --shadow-md: 0 4px 12px -2px hsl(0 0% 0% / 0.4);
+    --shadow-lg: 0 12px 32px -8px hsl(0 0% 0% / 0.55);
+    --shadow-glow: 0 0 40px hsl(119 40% 60% / 0.35);
+
+    --sidebar-background: 210 70% 5%;
+    --sidebar-foreground: 210 25% 88%;
+    --sidebar-primary: 119 32% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 55% 11%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 210 50% 14%;
+    --sidebar-ring: 119 32% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11", "ss01";
+    font-optical-sizing: auto;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    letter-spacing: -0.005em;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-weight: 500;
+    letter-spacing: -0.015em;
+  }
+}
+
+@layer utilities {
+  .gradient-primary { background: var(--gradient-primary); }
+  .gradient-hero { background: var(--gradient-hero); }
+  .gradient-accent { background: var(--gradient-accent); }
+  .gradient-card { background: var(--gradient-card); }
+  .shadow-elegant { box-shadow: var(--shadow-lg); }
+  .shadow-soft { box-shadow: var(--shadow-md); }
+  .shadow-glow { box-shadow: var(--shadow-glow); }
+  .transition-smooth { transition: var(--transition-smooth); }
+  .text-balance { text-wrap: balance; }
+
+  /* Premium SaaS polish */
+  .card-interactive {
+    @apply transition-all duration-200 hover:-translate-y-0.5 hover:shadow-elegant;
+  }
+  .focus-ring {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+  .section-divider {
+    @apply h-px w-full bg-gradient-to-r from-transparent via-border to-transparent;
+  }
+}
