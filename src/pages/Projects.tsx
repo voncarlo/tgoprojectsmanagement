@@ -186,7 +186,7 @@ const Projects = () => {
                 <Progress value={project.progress} className="h-2" />
               </div>
 
-              <div className="space-y-1.5 mb-4">
+              <div className="mb-4 max-h-80 space-y-1.5 overflow-y-auto pr-1">
                 {subtasks.length > 0 ? (
                   subtasks.map((subtask) => (
                     <button
