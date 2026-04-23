@@ -86,8 +86,8 @@ const Dashboard = () => {
         actions={
           <>
             <Badge variant="outline" className="hidden sm:inline-flex">{primaryDepartment}</Badge>
-            <Button asChild size="sm" variant="outline"><Link to="/approvals">Approvals · {pendingApprovals.length}</Link></Button>
-            <Button asChild size="sm"><Link to="/tasks">Open my work</Link></Button>
+            <Button asChild size="sm" variant="outline" className="flex-1 sm:flex-none"><Link to="/approvals">Approvals · {pendingApprovals.length}</Link></Button>
+            <Button asChild size="sm" className="flex-1 sm:flex-none"><Link to="/tasks">Open my work</Link></Button>
           </>
         }
       />
@@ -110,7 +110,7 @@ const Dashboard = () => {
               </p>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row">
             <Button asChild size="sm" variant="ghost"><Link to="/reports">View report</Link></Button>
             <Button asChild size="sm" variant="outline"><Link to="/automations">Tune automations</Link></Button>
           </div>

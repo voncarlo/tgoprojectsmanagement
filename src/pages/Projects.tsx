@@ -123,7 +123,7 @@ const Projects = () => {
         title="Projects"
         description="Track delivery health, ownership, timeline, and subtask progress across teams."
         actions={
-          <Button onClick={() => setCreateOpen(true)} className="gradient-primary text-primary-foreground gap-1.5">
+          <Button onClick={() => setCreateOpen(true)} className="gradient-primary w-full gap-1.5 text-primary-foreground sm:w-auto">
             <Plus className="h-4 w-4" /> New project
           </Button>
         }
@@ -224,12 +224,12 @@ const Projects = () => {
                 )}
               </div>
 
-              <div className="flex items-center justify-between pt-3 border-t border-border">
-                <div className="flex items-center gap-2">
+              <div className="flex flex-col gap-2 border-t border-border pt-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0 flex items-center gap-2">
                   <Avatar className="h-6 w-6"><AvatarFallback className="text-[9px] bg-primary/10 text-primary">{initials(project.owner)}</AvatarFallback></Avatar>
-                  <span className="text-xs text-muted-foreground">{project.owner}</span>
+                  <span className="truncate text-xs text-muted-foreground">{project.owner}</span>
                 </div>
-                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                   <span>{memberCount} member{memberCount !== 1 ? "s" : ""}</span>
                   <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{project.end.slice(5)}</span>
                 </div>
@@ -274,7 +274,7 @@ const Projects = () => {
                   <SheetDescription>{selectedProject.description}</SheetDescription>
                 </SheetHeader>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-3 sm:grid-cols-2">
                   <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-1.5">Team Lead</p>
                     <div className="flex items-center gap-2 text-xs">
@@ -303,7 +303,7 @@ const Projects = () => {
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Timeline</p>
                     {!canManageWork && <span className="text-[10px] text-muted-foreground">Team lead or members can edit</span>}
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid gap-2 sm:grid-cols-2">
                     <div className="space-y-1">
                       <label className="text-[10px] text-muted-foreground">Start</label>
                       <Input
@@ -354,7 +354,7 @@ const Projects = () => {
                     )}
                   </div>
                   {isProjectOwner && (
-                    <div className="flex gap-2">
+                    <div className="flex flex-col gap-2 sm:flex-row">
                       <Select value={pendingCoOwner} onValueChange={setPendingCoOwner}>
                         <SelectTrigger className="text-xs">
                           <SelectValue placeholder={coOwnerCandidates.length > 0 ? "Select a member" : "No available users"} />
@@ -386,7 +386,7 @@ const Projects = () => {
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Project status</p>
                     {!isProjectOwner && <span className="text-[10px] text-muted-foreground">Only the team lead can change status</span>}
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid gap-2 sm:grid-cols-2">
                     {PROJECT_STATUSES.map((status) => (
                       <button
                         key={status}

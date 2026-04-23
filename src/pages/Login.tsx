@@ -61,9 +61,9 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen w-full bg-muted/40 flex items-center justify-center px-4 py-10">
+    <div className="flex min-h-screen w-full items-center justify-center bg-muted/40 px-4 py-6 sm:py-10">
       <div className="w-full max-w-md animate-fade-in">
-        <div className="rounded-2xl border border-border bg-card shadow-soft p-8 sm:p-10 space-y-8">
+        <div className="space-y-6 rounded-2xl border border-border bg-card p-6 shadow-soft sm:p-10 sm:space-y-8">
           <div className="flex justify-center">
             <Logo
               variant="default"
@@ -74,8 +74,8 @@ const Login = () => {
             />
           </div>
 
-          <div className="text-center space-y-2">
-            <h1 className="text-3xl font-semibold tracking-tight text-foreground">Welcome back</h1>
+          <div className="space-y-2 text-center">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Welcome back</h1>
             <p className="text-sm text-muted-foreground">Sign in to continue to your account</p>
           </div>
 
@@ -124,8 +124,8 @@ const Login = () => {
               <p className="text-xs text-destructive" role="alert">{error}</p>
             )}
 
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 text-sm text-muted-foreground cursor-pointer select-none">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-muted-foreground">
                 <Checkbox
                   checked={remember}
                   onCheckedChange={(value) => setRemember(Boolean(value))}
@@ -174,7 +174,7 @@ const Login = () => {
       </div>
 
       <Dialog open={forgotOpen} onOpenChange={setForgotOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Forgot password</DialogTitle>
             <DialogDescription>

@@ -186,12 +186,12 @@ const Tasks = () => {
         title="Tasks"
         description="Plan, prioritise, and track work across boards, lists, and timelines. Staff task requests stay in Approvals until a manager, admin, or super admin approves them."
         actions={
-          <Button onClick={() => setDialogOpen(true)} className="gradient-primary text-primary-foreground gap-1.5">
+          <Button onClick={() => setDialogOpen(true)} className="gradient-primary w-full gap-1.5 text-primary-foreground sm:w-auto">
             <Plus className="h-4 w-4" /> New task
           </Button>
         }
       />
-      <div className="grid gap-3 grid-cols-2 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <StatTile label="All tasks" value={stats.total} icon={ListChecks} tone="text-foreground" />
         <StatTile label="In progress" value={stats.inProgress} icon={Clock} tone="text-info" />
         <StatTile label="Due today" value={stats.dueToday} icon={CalendarIcon} tone="text-primary" />
@@ -200,13 +200,13 @@ const Tasks = () => {
         <StatTile label="Completed" value={stats.completed} icon={CheckCircle2} tone="text-success" />
       </div>
 
-      <Card className="p-3 flex flex-wrap items-center gap-2">
+      <Card className="flex flex-wrap items-center gap-2 p-3">
         <div className="relative flex-1 min-w-[220px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input placeholder="Search tasks or people…" className="pl-9 h-9 bg-muted/40 border-transparent focus-visible:bg-background" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
 
-        <div className="flex items-center gap-1 rounded-lg bg-muted/50 p-1">
+        <div className="flex w-full items-center gap-1 rounded-lg bg-muted/50 p-1 sm:w-auto">
           {([
             { k: "all", label: "All" },
             { k: "mine", label: "Assigned to me" },
@@ -215,7 +215,7 @@ const Tasks = () => {
             <button
               key={s.k}
               onClick={() => setScope(s.k)}
-              className={cn("px-3 h-7 rounded-md text-xs font-medium transition-smooth",
+              className={cn("h-7 flex-1 rounded-md px-3 text-xs font-medium transition-smooth sm:flex-none",
                 scope === s.k ? "bg-background text-foreground shadow-soft" : "text-muted-foreground hover:text-foreground")}
             >
               {s.label}
@@ -241,7 +241,7 @@ const Tasks = () => {
           ))}
         </div>
 
-        <Button onClick={() => setDialogOpen(true)} className="gradient-primary text-primary-foreground gap-1.5 h-9"><Plus className="h-4 w-4" /> New task</Button>
+        <Button onClick={() => setDialogOpen(true)} className="gradient-primary h-9 w-full gap-1.5 text-primary-foreground sm:w-auto"><Plus className="h-4 w-4" /> New task</Button>
       </Card>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -290,7 +290,7 @@ const Tasks = () => {
         </TabsList>
 
         <TabsContent value="kanban" className="mt-0">
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+          <div className="grid auto-cols-[85%] grid-flow-col gap-3 overflow-x-auto pb-2 md:auto-cols-auto md:grid-flow-row md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
             {STATUSES.map((col) => {
               const items = filtered.filter((t) => t.status === col);
               const isOver = dragOverCol === col;
@@ -488,7 +488,7 @@ const Tasks = () => {
                   {open.project && <SheetDescription>Part of <span className="font-medium text-foreground">{open.project}</span></SheetDescription>}
                 </SheetHeader>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-3 sm:grid-cols-2">
                   <DetailRow label="Assigned by">
                     <div className="flex items-center gap-2">
                       <Avatar className="h-6 w-6"><AvatarFallback className="text-[9px] bg-primary/10 text-primary">{initials(open.assignedBy ?? "NA")}</AvatarFallback></Avatar>
@@ -511,7 +511,7 @@ const Tasks = () => {
 
                 <div>
                   <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-2">Move to status</p>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid gap-2 sm:grid-cols-2">
                     {STATUSES.map((s) => (
                       <button
                         key={s}
@@ -534,13 +534,13 @@ const Tasks = () => {
 
                 <div>
                   <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-2">Priority</p>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     {PRIORITIES.map((p) => (
                       <button
                         key={p}
                         disabled={!canEditTask}
                         onClick={() => { updateTask(open.id, { priority: p }); setOpen({ ...open, priority: p }); }}
-                        className={cn("flex-1 h-8 rounded-md text-[11px] font-medium border transition-smooth",
+                        className={cn("h-8 min-w-[88px] rounded-md border px-3 text-[11px] font-medium transition-smooth",
                           open.priority === p ? cn(priorityColor[p], "shadow-soft") : "border-border text-muted-foreground hover:bg-muted",
                           !canEditTask && "opacity-50 cursor-not-allowed")}
                       >

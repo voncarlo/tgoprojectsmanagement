@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight, MapPin, Plus, Trash2, User, Users } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/portal/PageHeader";
 import { useAuth } from "@/auth/AuthContext";
 import { useData } from "@/store/DataContext";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { toast } from "sonner";
 
 const EVENT_TYPES: CalendarEventType[] = ["PTO", "Call-out", "Meeting", "Event", "Deadline"];
@@ -38,6 +39,7 @@ const daysInMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth()
 
 const Calendar = () => {
   const { visibleTeams, currentUser, isManager, isAdmin, isSuperAdmin } = useAuth();
+  const isMobile = useIsMobile();
   const data = useData();
   const {
     calendarEvents,
@@ -94,6 +96,12 @@ const Calendar = () => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
+  useEffect(() => {
+    if (isMobile) {
+      setView((currentView) => (currentView === "month" ? "agenda" : currentView));
+    }
+  }, [isMobile]);
+
   const createEvent = () => {
     if (!title.trim()) return toast.error("Event title is required");
 
@@ -131,7 +139,7 @@ const Calendar = () => {
         title="Calendar"
         description="PTO, call-outs, meetings, events, and deadlines in one calendar. PTO entries require approval before they appear here."
         actions={
-          <Button className="gradient-primary text-primary-foreground gap-1.5" onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> New entry</Button>
+          <Button className="gradient-primary w-full gap-1.5 text-primary-foreground sm:w-auto" onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> New entry</Button>
         }
       />
 
@@ -152,20 +160,20 @@ const Calendar = () => {
       )}
 
       <Card className="p-4">
-        <div className="flex flex-wrap items-center gap-3 mb-4">
-          <div className="flex items-center gap-1">
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          <div className="flex w-full flex-wrap items-center gap-1 sm:w-auto">
             <Button variant="ghost" size="icon" onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))}><ChevronLeft className="h-4 w-4" /></Button>
-            <h2 className="text-base font-semibold tracking-tight min-w-[160px] text-center">{monthLabel}</h2>
+            <h2 className="min-w-[160px] flex-1 text-center text-base font-semibold tracking-tight sm:flex-none">{monthLabel}</h2>
             <Button variant="ghost" size="icon" onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))}><ChevronRight className="h-4 w-4" /></Button>
             <Button variant="outline" size="sm" className="ml-2 h-8" onClick={() => setCursor(new Date())}>Today</Button>
           </div>
 
-          <div className="flex items-center gap-1 rounded-lg bg-muted/50 p-1">
+          <div className="flex w-full items-center gap-1 rounded-lg bg-muted/50 p-1 sm:w-auto">
             {(["month", "week", "agenda"] as const).map((nextView) => (
               <button
                 key={nextView}
                 onClick={() => setView(nextView)}
-                className={cn("px-3 h-7 rounded-md text-xs font-medium capitalize transition-smooth", view === nextView ? "bg-background text-foreground shadow-soft" : "text-muted-foreground hover:text-foreground")}
+                className={cn("h-7 flex-1 rounded-md px-3 text-xs font-medium capitalize transition-smooth sm:flex-none", view === nextView ? "bg-background text-foreground shadow-soft" : "text-muted-foreground hover:text-foreground")}
               >
                 {nextView}
               </button>
@@ -187,11 +195,11 @@ const Calendar = () => {
         </div>
 
         {view === "month" && (
-          <div>
+          <div className={cn(isMobile && "overflow-x-auto pb-2")}>
             <div className="grid grid-cols-7 gap-px text-[11px] uppercase tracking-wider text-muted-foreground font-medium mb-1">
-              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => <div key={day} className="px-2 py-1.5">{day}</div>)}
+              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => <div key={day} className={cn("px-2 py-1.5", isMobile && "min-w-[6rem]")}>{day}</div>)}
             </div>
-            <div className="grid grid-cols-7 gap-px bg-border rounded-lg overflow-hidden">
+            <div className={cn("grid grid-cols-7 gap-px rounded-lg bg-border overflow-hidden", isMobile && "min-w-[42rem]")}>
               {cells.map((value, index) => {
                 if (!value) return <div key={index} className="bg-muted/20 min-h-[110px]" />;
                 const iso = value.toISOString().slice(0, 10);
@@ -251,7 +259,7 @@ const Calendar = () => {
       </Card>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>New calendar entry</DialogTitle>
             <DialogDescription>Add a PTO request, call-out, meeting, event, or deadline.</DialogDescription>
@@ -261,7 +269,7 @@ const Calendar = () => {
               <Label>Title</Label>
               <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Quarterly review meeting" />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Type</Label>
                 <Select value={eventType} onValueChange={(value) => setEventType(value as CalendarEvent["type"])}>

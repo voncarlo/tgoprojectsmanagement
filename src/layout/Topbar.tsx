@@ -80,23 +80,23 @@ export const Topbar = () => {
 
   return (
     <>
-      <header className="sticky top-0 z-20 flex h-16 items-center gap-4 border-b border-border bg-background/80 backdrop-blur-xl px-6">
+      <header className="sticky top-0 z-20 flex min-h-16 flex-wrap items-center gap-3 border-b border-border bg-background/80 px-4 py-3 backdrop-blur-xl sm:px-6">
         <Button
           variant="ghost"
           size="icon"
-          className="md:hidden -ml-2"
+          className="-ml-2 md:hidden"
           onClick={() => setMobileNavOpen(true)}
           aria-label="Open navigation"
         >
           <Menu className="h-5 w-5" />
         </Button>
-        <div className="flex flex-col">
-          <h1 className="text-lg font-semibold tracking-tight text-foreground">{meta.title}</h1>
-          <p className="text-xs text-muted-foreground">{meta.subtitle}</p>
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-base font-semibold tracking-tight text-foreground sm:text-lg">{meta.title}</h1>
+          <p className="hidden text-xs text-muted-foreground sm:block">{meta.subtitle}</p>
         </div>
         <Badge variant="outline" className="hidden md:inline-flex">{team}</Badge>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="flex w-full items-center justify-end gap-1.5 sm:ml-auto sm:w-auto sm:gap-2">
           <button
             onClick={() => setPaletteOpen(true)}
             className="hidden md:flex items-center gap-2 h-9 w-[280px] pl-3 pr-2 rounded-lg bg-muted/50 hover:bg-muted text-left text-sm text-muted-foreground border border-transparent hover:border-border transition-smooth"
@@ -109,8 +109,9 @@ export const Topbar = () => {
             </kbd>
           </button>
 
-          <Button size="sm" onClick={() => setQuickOpen(true)} className="gap-1.5 gradient-primary text-primary-foreground shadow-soft hover:opacity-95">
-            <Plus className="h-4 w-4" /> Quick add
+          <Button size="sm" onClick={() => setQuickOpen(true)} className="gradient-primary gap-1.5 px-3 text-primary-foreground shadow-soft hover:opacity-95 sm:px-4">
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline">Quick add</span>
           </Button>
 
           <Button
@@ -135,7 +136,7 @@ export const Topbar = () => {
                 )}
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-80">
+            <DropdownMenuContent align="end" className="w-[min(20rem,calc(100vw-1rem))]">
               <DropdownMenuLabel className="flex items-center justify-between">
                 <span>Notifications</span>
                 <div className="flex items-center gap-2">
@@ -192,7 +193,7 @@ export const Topbar = () => {
                 </Avatar>
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-72 overflow-hidden rounded-2xl border border-border/70 bg-background/95 p-0 shadow-[0_18px_45px_rgba(15,23,42,0.16)] backdrop-blur-xl">
+            <DropdownMenuContent align="end" className="w-[min(18rem,calc(100vw-1rem))] overflow-hidden rounded-2xl border border-border/70 bg-background/95 p-0 shadow-[0_18px_45px_rgba(15,23,42,0.16)] backdrop-blur-xl">
               <DropdownMenuLabel className="border-b border-border/70 bg-muted/35 px-4 py-4">
                 <div className="flex items-start gap-3">
                   <Avatar className="h-11 w-11 border border-border/70 shadow-sm">
