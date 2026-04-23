@@ -142,7 +142,7 @@ const Tasks = () => {
     <div className="space-y-6">
       <PageHeader
         title="Tasks"
-        description="Plan, prioritise, and track work across boards, lists, and timelines. Task completion is routed to the respective department manager for approval."
+        description="Plan, prioritise, and track work across boards, lists, and timelines. Staff-created tasks require manager, admin, or super admin approval before completion."
         actions={
           <Button onClick={() => setDialogOpen(true)} className="gradient-primary text-primary-foreground gap-1.5">
             <Plus className="h-4 w-4" /> New task
@@ -499,11 +499,45 @@ const Tasks = () => {
 
                 <Separator />
 
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-2">Subtasks</p>
+                  <div className="space-y-2">
+                    {(open.subtasks?.length ?? 0) > 0 ? (
+                      open.subtasks!.map((subtask) => (
+                        <button
+                          key={subtask.id}
+                          type="button"
+                          disabled={!canEditTask}
+                          onClick={() => {
+                            const nextSubtasks = (open.subtasks ?? []).map((item) =>
+                              item.id === subtask.id ? { ...item, done: !item.done } : item
+                            );
+                            updateTask(open.id, { subtasks: nextSubtasks });
+                            setOpen({ ...open, subtasks: nextSubtasks });
+                          }}
+                          className={cn(
+                            "flex w-full items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-left text-xs transition-smooth",
+                            canEditTask ? "hover:bg-muted/40" : "opacity-60 cursor-not-allowed"
+                          )}
+                        >
+                          {subtask.done
+                            ? <CheckCircle2 className="h-3.5 w-3.5 text-success shrink-0" />
+                            : <div className="h-3.5 w-3.5 rounded-full border border-muted-foreground/40 shrink-0" />}
+                          <span className={cn(subtask.done && "line-through text-muted-foreground")}>{subtask.title}</span>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="rounded-lg border border-dashed border-border px-3 py-3 text-xs text-muted-foreground">
+                        No subtasks yet.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 {open.requiresApproval && (
                   <ApprovalPanel
                     task={open}
-                    currentUserName={currentUser.name}
-                    canDecide={isManager || open.approver === currentUser.name}
+                    canDecide={isManager}
                     onDecide={(decision, c) => {
                       decideTaskApproval(open.id, decision, c);
                       const nextStatus =
@@ -581,13 +615,11 @@ const DetailRow = ({ label, children }: { label: string; children: React.ReactNo
 
 const ApprovalPanel = ({
   task,
-  currentUserName,
   canDecide,
   onDecide,
   onComment,
 }: {
   task: Task;
-  currentUserName: string;
   canDecide: boolean;
   onDecide: (decision: "Approved" | "Rejected" | "Returned for Revision", comment?: string) => void;
   onComment: (comment: string) => void;
@@ -595,7 +627,6 @@ const ApprovalPanel = ({
   const [comment, setComment] = useState("");
   const status = task.approvalStatus;
   const history = task.approvalHistory ?? [];
-  const isApprover = task.approver === currentUserName;
   const showActions = canDecide && status === "Pending Approval";
 
   const submit = (decision: "Approved" | "Rejected" | "Returned for Revision") => {
@@ -613,8 +644,7 @@ const ApprovalPanel = ({
           <div>
             <p className="text-sm font-medium leading-tight">Approval workflow</p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Approver: <span className="text-foreground font-medium">{task.approver ?? "—"}</span>
-              {isApprover && <span className="ml-2 text-primary">· You</span>}
+              Staff-created tasks can be approved by any manager, admin, or super admin.
             </p>
           </div>
         </div>
@@ -674,12 +704,12 @@ const ApprovalPanel = ({
         ) : status === "Pending Approval" ? (
           <div className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2.5 text-xs text-muted-foreground">
             <Lock className="h-3.5 w-3.5" />
-            Awaiting decision from {task.approver}. Only the assigned approver or a manager can decide.
+            Awaiting approval from any manager, admin, or super admin.
           </div>
         ) : (
           <div className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2.5 text-xs text-muted-foreground">
             <ShieldAlert className="h-3.5 w-3.5 text-primary" />
-            This task requires approval. When the assignee marks it complete it will be sent to {task.approver} for review.
+            This task requires approval. When the assignee marks it complete it will be sent to the approval queue.
           </div>
         )}
       </div>

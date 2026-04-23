@@ -85,7 +85,7 @@ const Projects = () => {
     <div className="space-y-6">
       <PageHeader
         title="Projects"
-        description="Track delivery health, milestones, and progress across teams. Project completion now routes through the department manager approval flow."
+        description="Track delivery health, milestones, and progress across teams. Staff-created projects require manager, admin, or super admin approval before completion."
         actions={
           <Button onClick={() => setCreateOpen(true)} className="gradient-primary text-primary-foreground gap-1.5">
             <Plus className="h-4 w-4" /> New project
@@ -187,8 +187,9 @@ const Projects = () => {
         <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
           {selectedProject && (() => {
             const team = teams.find((entry) => entry.id === selectedProject.team)!;
-            const linked = tasks.filter((task) => task.project === selectedProject.name).length;
-            const canDecide = isManager || selectedProject.approver === currentUser.name;
+            const linkedTasks = tasks.filter((task) => task.project === selectedProject.name);
+            const linked = linkedTasks.length;
+            const canDecide = isManager;
             const showApprovalActions = canDecide && selectedProject.approvalStatus === "Pending Approval";
 
             return (
@@ -253,84 +254,144 @@ const Projects = () => {
                     ))}
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    All projects require approval from the respective department manager before they can be completed.
+                    Only staff-created projects need approval before completion.
                   </p>
                 </div>
 
-                <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
-                  <div className="flex items-start justify-between gap-3 px-4 py-3 bg-muted/40 border-b border-border">
-                    <div className="flex items-start gap-2.5">
-                      <div className="h-8 w-8 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                        <ShieldCheck className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium leading-tight">Approval workflow</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          Approver: <span className="text-foreground font-medium">{selectedProject.approver ?? team.lead}</span>
-                        </p>
-                      </div>
-                    </div>
-                    {selectedProject.approvalStatus && (
-                      <Badge variant="outline" className={cn("text-[10px] shrink-0", approvalTone[selectedProject.approvalStatus])}>{selectedProject.approvalStatus}</Badge>
-                    )}
-                  </div>
-
-                  <div className="p-4 space-y-4">
-                    {selectedProject.approvalHistory && selectedProject.approvalHistory.length > 0 && (
-                      <div>
-                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-2">History</p>
-                        <ol className="relative border-l border-border ml-2 space-y-2.5">
-                          {selectedProject.approvalHistory.map((entry) => (
-                            <li key={entry.id} className="ml-3 text-xs">
-                              <span className="absolute -left-1.5 mt-1 h-3 w-3 rounded-full border-2 border-background bg-primary" />
-                              <div className="flex items-baseline gap-1.5">
-                                <span className="font-medium text-foreground">{entry.actor}</span>
-                                <span className="text-muted-foreground">{entry.action.toLowerCase()}</span>
-                                <span className="text-muted-foreground/60 ml-auto">{entry.at}</span>
-                              </div>
-                              {entry.comment && <p className="text-muted-foreground mt-0.5">"{entry.comment}"</p>}
-                            </li>
-                          ))}
-                        </ol>
-                      </div>
-                    )}
-
-                    {showApprovalActions ? (
-                      <div className="space-y-2">
-                        <Textarea
-                          rows={2}
-                          value={approvalComment}
-                          onChange={(event) => setApprovalComment(event.target.value)}
-                          placeholder="Add a comment for the requester (optional)..."
-                          className="text-xs"
-                        />
-                        <div className="flex flex-wrap gap-2">
-                          <Button size="sm" className="gradient-primary text-primary-foreground gap-1.5 flex-1 min-w-[110px]" onClick={() => handleApprovalDecision("Approved")}>
-                            <ShieldCheck className="h-3.5 w-3.5" /> Approve
-                          </Button>
-                          <Button size="sm" variant="outline" className="gap-1.5 min-w-[110px]" onClick={() => handleApprovalDecision("Returned for Revision")}>
-                            <RotateCcw className="h-3.5 w-3.5" /> Return
-                          </Button>
-                          <Button size="sm" variant="outline" className="gap-1.5 text-destructive hover:text-destructive min-w-[110px]" onClick={() => handleApprovalDecision("Rejected")}>
-                            <ShieldX className="h-3.5 w-3.5" /> Reject
-                          </Button>
+                {selectedProject.requiresApproval && (
+                  <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
+                    <div className="flex items-start justify-between gap-3 px-4 py-3 bg-muted/40 border-b border-border">
+                      <div className="flex items-start gap-2.5">
+                        <div className="h-8 w-8 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                          <ShieldCheck className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium leading-tight">Approval workflow</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Staff-created projects can be approved by any manager, admin, or super admin.
+                          </p>
                         </div>
                       </div>
-                    ) : selectedProject.approvalStatus === "Pending Approval" ? (
-                      <div className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2.5 text-xs text-muted-foreground">
-                        <Lock className="h-3.5 w-3.5" />
-                        Awaiting decision from {selectedProject.approver ?? team.lead}. Only the assigned approver or a manager can decide.
-                      </div>
+                      {selectedProject.approvalStatus && (
+                        <Badge variant="outline" className={cn("text-[10px] shrink-0", approvalTone[selectedProject.approvalStatus])}>{selectedProject.approvalStatus}</Badge>
+                      )}
+                    </div>
+
+                    <div className="p-4 space-y-4">
+                      {selectedProject.approvalHistory && selectedProject.approvalHistory.length > 0 && (
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-2">History</p>
+                          <ol className="relative border-l border-border ml-2 space-y-2.5">
+                            {selectedProject.approvalHistory.map((entry) => (
+                              <li key={entry.id} className="ml-3 text-xs">
+                                <span className="absolute -left-1.5 mt-1 h-3 w-3 rounded-full border-2 border-background bg-primary" />
+                                <div className="flex items-baseline gap-1.5">
+                                  <span className="font-medium text-foreground">{entry.actor}</span>
+                                  <span className="text-muted-foreground">{entry.action.toLowerCase()}</span>
+                                  <span className="text-muted-foreground/60 ml-auto">{entry.at}</span>
+                                </div>
+                                {entry.comment && <p className="text-muted-foreground mt-0.5">"{entry.comment}"</p>}
+                              </li>
+                            ))}
+                          </ol>
+                        </div>
+                      )}
+
+                      {showApprovalActions ? (
+                        <div className="space-y-2">
+                          <Textarea
+                            rows={2}
+                            value={approvalComment}
+                            onChange={(event) => setApprovalComment(event.target.value)}
+                            placeholder="Add a comment for the requester (optional)..."
+                            className="text-xs"
+                          />
+                          <div className="flex flex-wrap gap-2">
+                            <Button size="sm" className="gradient-primary text-primary-foreground gap-1.5 flex-1 min-w-[110px]" onClick={() => handleApprovalDecision("Approved")}>
+                              <ShieldCheck className="h-3.5 w-3.5" /> Approve
+                            </Button>
+                            <Button size="sm" variant="outline" className="gap-1.5 min-w-[110px]" onClick={() => handleApprovalDecision("Returned for Revision")}>
+                              <RotateCcw className="h-3.5 w-3.5" /> Return
+                            </Button>
+                            <Button size="sm" variant="outline" className="gap-1.5 text-destructive hover:text-destructive min-w-[110px]" onClick={() => handleApprovalDecision("Rejected")}>
+                              <ShieldX className="h-3.5 w-3.5" /> Reject
+                            </Button>
+                          </div>
+                        </div>
+                      ) : selectedProject.approvalStatus === "Pending Approval" ? (
+                        <div className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2.5 text-xs text-muted-foreground">
+                          <Lock className="h-3.5 w-3.5" />
+                          Awaiting approval from any manager, admin, or super admin.
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2.5 text-xs text-muted-foreground">
+                          <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+                          Completion approval happens right before the project is marked complete.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <Separator />
+
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-2">Subtasks</p>
+                  <div className="space-y-2">
+                    {(selectedProject.subtasks?.length ?? 0) > 0 ? (
+                      selectedProject.subtasks!.map((subtask) => (
+                        <button
+                          key={subtask.id}
+                          type="button"
+                          disabled={!canEditProjects}
+                          onClick={() => {
+                            const nextSubtasks = (selectedProject.subtasks ?? []).map((item) =>
+                              item.id === subtask.id ? { ...item, done: !item.done } : item
+                            );
+                            syncProject({ subtasks: nextSubtasks });
+                            setSelectedProject((current) => current ? { ...current, subtasks: nextSubtasks } : current);
+                          }}
+                          className={cn(
+                            "flex w-full items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-left text-xs transition-smooth",
+                            canEditProjects ? "hover:bg-muted/40" : "opacity-60 cursor-not-allowed"
+                          )}
+                        >
+                          {subtask.done
+                            ? <CheckCircle2 className="h-3.5 w-3.5 text-success shrink-0" />
+                            : <div className="h-3.5 w-3.5 rounded-full border border-muted-foreground/40 shrink-0" />}
+                          <span className={cn(subtask.done && "line-through text-muted-foreground")}>{subtask.title}</span>
+                        </button>
+                      ))
                     ) : (
-                      <div className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2.5 text-xs text-muted-foreground">
-                        <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-                        Completion approval happens right before the project is marked complete.
+                      <div className="rounded-lg border border-dashed border-border px-3 py-3 text-xs text-muted-foreground">
+                        No subtasks yet.
                       </div>
                     )}
                   </div>
                 </div>
 
-                <Separator />
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-2">Linked tasks</p>
+                  <div className="space-y-2">
+                    {linkedTasks.length > 0 ? (
+                      linkedTasks.map((task) => (
+                        <div key={task.id} className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-medium text-foreground">{task.title}</span>
+                            <Badge variant="outline" className="text-[10px]">
+                              {task.status}
+                            </Badge>
+                          </div>
+                          <p className="mt-1 text-xs text-muted-foreground">{task.assignee} · due {task.due}</p>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="rounded-lg border border-dashed border-border px-3 py-3 text-xs text-muted-foreground">
+                        No linked tasks yet.
+                      </div>
+                    )}
+                  </div>
+                </div>
 
                 <div className="space-y-1.5">
                   {selectedProject.milestones.map((milestone) => (

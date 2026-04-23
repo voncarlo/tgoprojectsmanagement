@@ -15,6 +15,12 @@ import { toast } from "sonner";
 const PRIORITIES: Priority[] = ["Low", "Medium", "High", "Urgent"];
 const STATUSES: TaskStatus[] = ["Not Started", "In Progress", "On Hold", "Completed"];
 const PROJECT_STATUSES: ProjectStatus[] = ["Planning", "Active", "At Risk", "Completed"];
+const parseSubtasks = (value: string) =>
+  value
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((title, index) => ({ id: `sub-${Date.now()}-${index}`, title, done: false }));
 
 interface Props {
   open: boolean;
@@ -29,8 +35,7 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
   const { addTask, addProject } = useData();
   const teamsAvailable = teams.filter((team) => visibleTeams.includes(team.id));
   const initialTeam = defaultTeam ?? (teamsAvailable[0]?.id ?? currentUser.team);
-  const managerLabelFor = (teamId: TeamId) =>
-    teams.find((team) => team.id === teamId)?.lead ?? userList[0]?.name ?? currentUser.name;
+  const creatorNeedsApproval = currentUser.role === "Staff";
 
   const [tab, setTab] = useState<"task" | "project">(defaultTab);
   const [tTitle, setTTitle] = useState("");
@@ -40,9 +45,12 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
   const [tStatus, setTStatus] = useState<TaskStatus>(defaultStatus ?? "Not Started");
   const [tDue, setTDue] = useState(new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10));
   const [tNotes, setTNotes] = useState("");
+  const [tSubtasks, setTSubtasks] = useState("");
 
   const [pName, setPName] = useState("");
   const [pDesc, setPDesc] = useState("");
+  const [pTasks, setPTasks] = useState("");
+  const [pSubtasks, setPSubtasks] = useState("");
   const [pTeam, setPTeam] = useState<TeamId>(initialTeam);
   const [pOwner, setPOwner] = useState(currentUser.name);
   const [pStatus, setPStatus] = useState<ProjectStatus>("Planning");
@@ -61,8 +69,11 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
   const reset = () => {
     setTTitle("");
     setTNotes("");
+    setTSubtasks("");
     setPName("");
     setPDesc("");
+    setPTasks("");
+    setPSubtasks("");
   };
 
   const submitTask = () => {
@@ -75,8 +86,7 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
       status: tStatus,
       due: tDue,
       notes: tNotes || undefined,
-      requiresApproval: true,
-      approver: managerLabelFor(tTeam),
+      subtasks: parseSubtasks(tSubtasks),
       approvalStatus: undefined,
       approvalHistory: [],
     });
@@ -87,7 +97,7 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
 
   const submitProject = () => {
     if (!pName.trim()) return toast.error("Project name is required");
-    addProject({
+    const createdProject = addProject({
       name: pName.trim(),
       description: pDesc || "-",
       team: pTeam,
@@ -96,6 +106,22 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
       progress: 0,
       start: pStart,
       end: pEnd,
+      subtasks: parseSubtasks(pSubtasks),
+    });
+    parseSubtasks(pTasks).forEach((projectTask) => {
+      addTask({
+        title: projectTask.title,
+        assignee: pOwner,
+        team: pTeam,
+        priority: "Medium",
+        status: "Not Started",
+        due: pEnd,
+        notes: `Linked to project: ${createdProject.name}`,
+        project: createdProject.name,
+        subtasks: [],
+        approvalStatus: undefined,
+        approvalHistory: [],
+      });
     });
     toast.success("Project created");
     reset();
@@ -166,15 +192,21 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
               <Label>Notes</Label>
               <Textarea rows={3} value={tNotes} onChange={(event) => setTNotes(event.target.value)} placeholder="Optional context..." />
             </div>
+            <div className="space-y-2">
+              <Label>Subtasks</Label>
+              <Textarea rows={4} value={tSubtasks} onChange={(event) => setTSubtasks(event.target.value)} placeholder={"One subtask per line\nExample:\nDraft outline\nReview with manager\nSubmit final copy"} />
+            </div>
             <div className="rounded-lg border border-border bg-muted/30 p-3">
               <div className="flex items-start gap-2.5">
                 <div className="h-8 w-8 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
                   <ShieldCheck className="h-4 w-4" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium">Department manager approval</p>
+                  <p className="text-sm font-medium">Completion approval</p>
                   <p className="text-xs text-muted-foreground">
-                    All tasks are routed to the respective department manager before completion. This task will go to {managerLabelFor(tTeam)} when marked complete.
+                    {creatorNeedsApproval
+                      ? "Staff-created tasks go to any manager, admin, or super admin when marked complete."
+                      : "Tasks created by managers, admins, and super admins can be completed without extra approval."}
                   </p>
                 </div>
               </div>
@@ -193,6 +225,19 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
             <div className="space-y-2">
               <Label>Description</Label>
               <Textarea rows={2} value={pDesc} onChange={(event) => setPDesc(event.target.value)} placeholder="Brief description" />
+            </div>
+            <div className="space-y-2">
+              <Label>Project tasks</Label>
+              <Textarea
+                rows={4}
+                value={pTasks}
+                onChange={(event) => setPTasks(event.target.value)}
+                placeholder={"One task per line\nExample:\nCollect requirements\nAssign stakeholders\nPrepare rollout plan"}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Subtasks</Label>
+              <Textarea rows={4} value={pSubtasks} onChange={(event) => setPSubtasks(event.target.value)} placeholder={"One subtask per line\nExample:\nDefine scope\nAssign owners\nReview launch checklist"} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
@@ -237,9 +282,11 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
                   <ShieldCheck className="h-4 w-4" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium">Department manager approval</p>
+                  <p className="text-sm font-medium">Completion approval</p>
                   <p className="text-xs text-muted-foreground">
-                    All projects are routed to the respective department manager before completion. This project will go to {managerLabelFor(pTeam)} when marked complete.
+                    {creatorNeedsApproval
+                      ? "Staff-created projects go to any manager, admin, or super admin when marked complete."
+                      : "Projects created by managers, admins, and super admins can be completed without extra approval."}
                   </p>
                 </div>
               </div>

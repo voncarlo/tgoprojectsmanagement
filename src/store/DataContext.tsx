@@ -4,7 +4,6 @@ import {
   projects as seedProjects,
   activity as seedActivity,
   approvals as seedApprovals,
-  teams,
   documents as seedDocuments,
   automations as seedAutomations,
   auditLog as seedAuditLog,
@@ -13,6 +12,7 @@ import {
   type Project,
   type Activity,
   type Milestone,
+  type Subtask,
   type TaskApprovalStatus,
   type ApprovalHistoryEntry,
   type Approval,
@@ -227,8 +227,9 @@ const recomputeProgress = (project: Project): Project => {
   return { ...project, progress: Math.round((done / total) * 100) };
 };
 
-const getTeamApproverName = (teamId: TeamId, fallback: string) =>
-  teams.find((team) => team.id === teamId)?.lead ?? fallback;
+const normalizeSubtasks = (subtasks?: Subtask[]) => subtasks ?? [];
+
+const roleNeedsApproval = (role: string) => role === "Staff";
 
 export const DataProvider = ({ children }: { children: ReactNode }) => {
   const auth = useAuth();
@@ -401,12 +402,14 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
   const addTask: DataCtx["addTask"] = useCallback(
     (taskInput) => {
+      const requiresApproval = roleNeedsApproval(currentUser.role);
       const next: Task = {
         ...taskInput,
         id: id("t"),
-        requiresApproval: true,
-        approver: getTeamApproverName(taskInput.team, taskInput.approver ?? currentUser.name),
+        requiresApproval,
+        approver: requiresApproval ? taskInput.approver : undefined,
         approvalHistory: taskInput.approvalHistory ?? [],
+        subtasks: normalizeSubtasks(taskInput.subtasks),
       };
       setTasks((items) => [next, ...items]);
       pushActivity({ user: currentUser.name, action: "created task", target: next.title });
@@ -419,7 +422,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       });
       return next;
     },
-    [appendAudit, currentUser.name, pushActivity]
+    [appendAudit, currentUser.name, currentUser.role, pushActivity]
   );
 
   const updateTask: DataCtx["updateTask"] = useCallback(
@@ -434,13 +437,14 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           let next: Task = {
             ...task,
             ...patch,
-            requiresApproval: true,
-            approver: getTeamApproverName((patch.team ?? task.team) as TeamId, patch.approver ?? task.approver ?? currentUser.name),
+            requiresApproval: patch.requiresApproval ?? task.requiresApproval,
+            approver: (patch.requiresApproval ?? task.requiresApproval) ? patch.approver ?? task.approver : undefined,
+            subtasks: normalizeSubtasks(patch.subtasks ?? task.subtasks),
           };
           if (
             patch.status === "Completed" &&
             task.status !== "Completed" &&
-            next.approver &&
+            next.requiresApproval &&
             next.approvalStatus !== "Approved"
           ) {
             const entry: ApprovalHistoryEntry = {
@@ -470,7 +474,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         pushActivity({
           user: currentUser.name,
           action: "submitted for approval",
-          target: `${updatedTask.title} -> ${updatedTask.approver}`,
+          target: updatedTask.title,
         });
         appendAudit({
           user: currentUser.name,
@@ -545,6 +549,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
   const addProject: DataCtx["addProject"] = useCallback(
     (projectInput) => {
+      const requiresApproval = roleNeedsApproval(currentUser.role);
       const next: Project = {
         ...projectInput,
         id: id("p"),
@@ -553,9 +558,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           { name: "Build", done: false },
           { name: "Launch", done: false },
         ],
-        requiresApproval: true,
-        approver: getTeamApproverName(projectInput.team, projectInput.owner),
+        requiresApproval,
+        approver: requiresApproval ? projectInput.approver : undefined,
         approvalHistory: [],
+        subtasks: normalizeSubtasks(projectInput.subtasks),
       };
       const withProgress = recomputeProgress(next);
       setProjects((items) => [withProgress, ...items]);
@@ -569,7 +575,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       });
       return withProgress;
     },
-    [appendAudit, currentUser.name, pushActivity]
+    [appendAudit, currentUser.name, currentUser.role, pushActivity]
   );
 
   const updateProject: DataCtx["updateProject"] = useCallback(
@@ -582,13 +588,14 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           let nextProject = recomputeProgress({
             ...project,
             ...patch,
-            requiresApproval: true,
-            approver: getTeamApproverName((patch.team ?? project.team) as TeamId, patch.approver ?? project.approver ?? project.owner),
+            requiresApproval: patch.requiresApproval ?? project.requiresApproval,
+            approver: (patch.requiresApproval ?? project.requiresApproval) ? patch.approver ?? project.approver : undefined,
+            subtasks: normalizeSubtasks(patch.subtasks ?? project.subtasks),
           });
           if (
             patch.status === "Completed" &&
             project.status !== "Completed" &&
-            nextProject.approver &&
+            nextProject.requiresApproval &&
             nextProject.approvalStatus !== "Approved"
           ) {
             const entry: ApprovalHistoryEntry = {
@@ -615,7 +622,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         pushActivity({
           user: currentUser.name,
           action: "submitted project for approval",
-          target: `${updatedProject.name} -> ${updatedProject.approver}`,
+          target: updatedProject.name,
         });
         appendAudit({
           user: currentUser.name,

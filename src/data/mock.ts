@@ -113,9 +113,11 @@ export interface Task {
   approver?: string;          // user name of the assigned approver
   approvalStatus?: TaskApprovalStatus;
   approvalHistory?: ApprovalHistoryEntry[];
+  subtasks?: Subtask[];
 }
 
 export interface Milestone { name: string; done: boolean; }
+export interface Subtask { id: string; title: string; done: boolean; }
 export interface Project {
   id: string;
   name: string;
@@ -131,6 +133,7 @@ export interface Project {
   approver?: string;
   approvalStatus?: TaskApprovalStatus;
   approvalHistory?: ApprovalHistoryEntry[];
+  subtasks?: Subtask[];
 }
 
 export interface Activity {
