@@ -49,7 +49,7 @@ const saveServerState = async (state: PersistedAuthState) => {
 
 const STORAGE_KEY = "tgo.auth";
 const REMEMBER_EMAIL_KEY = "tgo.auth.rememberedEmail";
-const STORAGE_VERSION = 5;
+const STORAGE_VERSION = 6;
 const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   enabled: true,
   digest: true,
@@ -64,6 +64,7 @@ const defaultPasswords = seedUsers.reduce<Record<string, string>>((acc, user) =>
 }, {});
 
 const defaultAuthState: PersistedAuthState = {
+  version: STORAGE_VERSION,
   currentUserId: seedUsers[0].id,
   passwords: defaultPasswords,
   userList: seedUsers,
@@ -119,18 +120,7 @@ const normalizeUser = (user: User): User => {
 
 const mergeUsers = (savedUsers: User[] | undefined): User[] => {
   const normalizedSaved = (savedUsers ?? []).map(normalizeUser);
-  const byEmail = new Map(normalizedSaved.map((user) => [user.email.toLowerCase(), user]));
-
-  for (const seedUser of seedUsers) {
-    const key = seedUser.email.toLowerCase();
-    if (!byEmail.has(key)) {
-      byEmail.set(key, seedUser);
-      continue;
-    }
-    byEmail.set(key, normalizeUser({ ...seedUser, ...byEmail.get(key)! }));
-  }
-
-  return [...byEmail.values()];
+  return normalizedSaved.length > 0 ? normalizedSaved : seedUsers.map(normalizeUser);
 };
 
 const loadAuthState = (): PersistedAuthState => {

@@ -34,6 +34,18 @@ const getConnectionOptions = () => {
 
 let pool;
 
+const ensureTableColumn = async (tableName, columnName, definition) => {
+  const connection = getPool();
+  const [rows] = await connection.query(
+    `SELECT COUNT(*) AS count
+     FROM information_schema.columns
+     WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?`,
+    [tableName, columnName]
+  );
+  if (rows[0]?.count) return;
+  await connection.query(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`);
+};
+
 export const hasDatabaseConfig = () => Boolean(getConnectionOptions());
 
 export const getPool = () => {
@@ -58,6 +70,9 @@ export const ensureSchema = async () => {
   for (const statement of statements) {
     await connection.query(statement);
   }
+
+  await ensureTableColumn("users", "avatar_url", "TEXT NULL");
+  await ensureTableColumn("users", "notification_settings_json", "JSON NULL");
 };
 
 export const query = async (sql, params = []) => {

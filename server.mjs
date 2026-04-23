@@ -4,7 +4,7 @@ import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ensureSchema, getPool, hasDatabaseConfig } from "./server/db.mjs";
-import { getStateSnapshot, listProjects, listTasks, listUsers, saveStateSnapshot, seedDatabase } from "./server/repository.mjs";
+import { getAuthState, getStateSnapshot, listProjects, listTasks, listUsers, migrateLegacyAuthSnapshot, saveAuthState, saveStateSnapshot, seedDatabase } from "./server/repository.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -71,13 +71,13 @@ const handleApiRequest = async (req, res, pathname) => {
   }
 
   if (pathname === "/api/state/auth" && req.method === "GET") {
-    sendJson(res, 200, { ok: true, data: await getStateSnapshot("auth") });
+    sendJson(res, 200, { ok: true, data: await getAuthState() });
     return true;
   }
 
   if (pathname === "/api/state/auth" && req.method === "PUT") {
     const body = await readJsonBody(req);
-    await saveStateSnapshot("auth", body);
+    await saveAuthState(body);
     sendJson(res, 200, { ok: true });
     return true;
   }
@@ -147,6 +147,7 @@ const start = async () => {
   if (hasDatabaseConfig()) {
     await ensureSchema();
     await seedDatabase();
+    await migrateLegacyAuthSnapshot();
     console.log("MySQL schema ready.");
   } else {
     console.log("MySQL not configured yet. API routes will return 503 until database env vars are set.");
