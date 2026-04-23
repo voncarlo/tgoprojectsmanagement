@@ -27,6 +27,18 @@ const approvalTone = {
 } as const;
 
 const initials = (name: string) => name.split(" ").map((part) => part[0]).join("").slice(0, 2);
+const getProjectProgress = (project: Pick<Project, "milestones" | "subtasks">) => {
+  const trackedItems = project.subtasks?.length ? project.subtasks : project.milestones;
+  const total = trackedItems.length;
+  if (!total) return 0;
+  return Math.round((trackedItems.filter((item) => item.done).length / total) * 100);
+};
+const getNextProjectStatus = (project: Pick<Project, "status" | "milestones" | "subtasks">): ProjectStatus => {
+  const progress = getProjectProgress(project);
+  if (progress === 100) return "Completed";
+  if (project.status === "Completed" || (project.status === "Planning" && progress > 0)) return "Active";
+  return project.status;
+};
 
 const Projects = () => {
   const { visibleTeams, currentUser, isManager, can } = useAuth();
@@ -109,6 +121,7 @@ const Projects = () => {
         {list.map((project) => {
           const team = teams.find((entry) => entry.id === project.team)!;
           const linked = tasks.filter((task) => task.project === project.name).length;
+          const checklistItems = project.subtasks?.length ? project.subtasks : project.milestones;
           return (
             <Card key={project.id} className="p-5 hover:shadow-elegant transition-smooth gradient-card cursor-pointer" onClick={() => openProject(project)}>
               <div className="flex items-start justify-between mb-3">
@@ -148,20 +161,38 @@ const Projects = () => {
               </div>
 
               <div className="space-y-1.5 mb-4">
-                {project.milestones.map((milestone) => (
+                {checklistItems.map((item) => (
                   <button
                     type="button"
-                    key={milestone.name}
+                    key={"id" in item ? item.id : item.name}
                     onClick={(event) => {
                       event.stopPropagation();
-                      toggleMilestone(project.id, milestone.name);
+                      if ("id" in item) {
+                        const nextSubtasks = (project.subtasks ?? []).map((subtask) =>
+                          subtask.id === item.id ? { ...subtask, done: !subtask.done } : subtask
+                        );
+                        const nextStatus = getNextProjectStatus({ ...project, subtasks: nextSubtasks });
+                        updateProject(project.id, {
+                          subtasks: nextSubtasks,
+                          ...(nextStatus !== project.status ? { status: nextStatus } : {}),
+                        });
+                        return;
+                      }
+                      const nextMilestones = project.milestones.map((milestone) =>
+                        milestone.name === item.name ? { ...milestone, done: !milestone.done } : milestone
+                      );
+                      const nextStatus = getNextProjectStatus({ ...project, milestones: nextMilestones });
+                      toggleMilestone(project.id, item.name);
+                      if (nextStatus !== project.status) {
+                        updateProject(project.id, { status: nextStatus });
+                      }
                     }}
                     className="flex w-full items-center gap-2 text-xs rounded-md p-1 -mx-1 hover:bg-muted/50 transition-smooth text-left"
                   >
-                    {milestone.done
+                    {item.done
                       ? <CheckCircle2 className="h-3.5 w-3.5 text-success shrink-0" />
                       : <Circle className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
-                    <span className={cn(milestone.done && "text-muted-foreground line-through")}>{milestone.name}</span>
+                    <span className={cn(item.done && "text-muted-foreground line-through")}>{"title" in item ? item.title : item.name}</span>
                   </button>
                 ))}
               </div>
@@ -348,8 +379,17 @@ const Projects = () => {
                             const nextSubtasks = (selectedProject.subtasks ?? []).map((item) =>
                               item.id === subtask.id ? { ...item, done: !item.done } : item
                             );
-                            syncProject({ subtasks: nextSubtasks });
-                            setSelectedProject((current) => current ? { ...current, subtasks: nextSubtasks } : current);
+                            const nextStatus = getNextProjectStatus({ ...selectedProject, subtasks: nextSubtasks });
+                            syncProject({
+                              subtasks: nextSubtasks,
+                              ...(nextStatus !== selectedProject.status ? { status: nextStatus } : {}),
+                            });
+                            setSelectedProject((current) => current ? {
+                              ...current,
+                              subtasks: nextSubtasks,
+                              status: nextStatus,
+                              progress: getProjectProgress({ ...current, subtasks: nextSubtasks }),
+                            } : current);
                           }}
                           className={cn(
                             "flex w-full items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-left text-xs transition-smooth",
@@ -399,12 +439,25 @@ const Projects = () => {
                       type="button"
                       key={milestone.name}
                       onClick={() => {
+                        const nextMilestones = selectedProject.milestones.map((item) =>
+                          item.name === milestone.name ? { ...item, done: !item.done } : item
+                        );
+                        const nextStatus = getNextProjectStatus({
+                          ...selectedProject,
+                          milestones: nextMilestones,
+                        });
                         toggleMilestone(selectedProject.id, milestone.name);
+                        if (nextStatus !== selectedProject.status) {
+                          updateProject(selectedProject.id, { status: nextStatus });
+                        }
                         setSelectedProject((current) => current ? {
                           ...current,
-                          milestones: current.milestones.map((item) =>
-                            item.name === milestone.name ? { ...item, done: !item.done } : item
-                          ),
+                          milestones: nextMilestones,
+                          status: nextStatus,
+                          progress: getProjectProgress({
+                            ...current,
+                            milestones: nextMilestones,
+                          }),
                         } : current);
                       }}
                       className="flex w-full items-center gap-2 text-xs rounded-md p-1 -mx-1 hover:bg-muted/50 transition-smooth text-left"

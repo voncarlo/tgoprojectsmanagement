@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bell, Search, Plus, CheckCheck, Sun, Moon, Command as CommandIcon, Menu, MessageSquare, LogOut, Settings, Sparkles, UserCircle2 } from "lucide-react";
+import { Bell, Search, Plus, CheckCheck, Sun, Moon, Command as CommandIcon, Menu, MessageSquare, LogOut, Settings, Sparkles, UserCircle2, Trash2 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -54,7 +54,7 @@ export const Topbar = () => {
   const navigate = useNavigate();
   const meta = titles[pathname] ?? titles["/dashboard"];
   const { currentUser, signOut } = useAuth();
-  const { notifications, unreadCount, markAllRead } = useData();
+  const { notifications, unreadCount, markAllRead, clearNotifications } = useData();
   const { theme, toggleTheme } = useTheme();
   const team = teams.find((item) => item.id === currentUser.team)?.name ?? currentUser.team;
   const [quickOpen, setQuickOpen] = useState(false);
@@ -138,16 +138,28 @@ export const Topbar = () => {
             <DropdownMenuContent align="end" className="w-80">
               <DropdownMenuLabel className="flex items-center justify-between">
                 <span>Notifications</span>
-                <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    markAllRead();
-                    toast.success("All notifications marked as read");
-                  }}
-                  className="flex items-center gap-1 text-[10px] font-medium text-primary hover:underline"
-                >
-                  <CheckCheck className="h-3 w-3" /> Mark all read
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      markAllRead();
+                      toast.success("All notifications marked as read");
+                    }}
+                    className="flex items-center gap-1 text-[10px] font-medium text-primary hover:underline"
+                  >
+                    <CheckCheck className="h-3 w-3" /> Mark all read
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      clearNotifications();
+                      toast.success("Notifications cleared");
+                    }}
+                    className="flex items-center gap-1 text-[10px] font-medium text-destructive hover:underline"
+                  >
+                    <Trash2 className="h-3 w-3" /> Clear
+                  </button>
+                </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               {notifications.length === 0 && (

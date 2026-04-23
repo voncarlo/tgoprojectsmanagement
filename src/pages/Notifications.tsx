@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Bell, CheckCheck, BellOff } from "lucide-react";
+import { Bell, CheckCheck, BellOff, Trash2 } from "lucide-react";
 import { useData } from "@/store/DataContext";
 import { PageHeader } from "@/components/portal/PageHeader";
 import { EmptyState } from "@/components/portal/EmptyState";
@@ -12,7 +12,7 @@ import { useAuth } from "@/auth/AuthContext";
 
 const Notifications = () => {
   const { currentUser } = useAuth();
-  const { notifications, markAllRead } = useData();
+  const { notifications, markAllRead, clearNotifications } = useData();
   const [filter, setFilter] = useState<"all" | "unread" | "read">("all");
   const notificationsEnabled = currentUser.notificationSettings?.enabled !== false;
 
@@ -28,9 +28,21 @@ const Notifications = () => {
         title="Notifications"
         description="Mentions, assignments, approval requests and automation alerts."
         actions={
-          <Button variant="outline" className="gap-1.5" onClick={() => { markAllRead(); toast.success("All notifications marked as read"); }}>
-            <CheckCheck className="h-4 w-4" /> Mark all read
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" className="gap-1.5" onClick={() => { markAllRead(); toast.success("All notifications marked as read"); }}>
+              <CheckCheck className="h-4 w-4" /> Mark all read
+            </Button>
+            <Button
+              variant="outline"
+              className="gap-1.5 text-destructive hover:text-destructive"
+              onClick={() => {
+                clearNotifications();
+                toast.success("Notifications cleared");
+              }}
+            >
+              <Trash2 className="h-4 w-4" /> Clear notifications
+            </Button>
+          </div>
         }
       />
 

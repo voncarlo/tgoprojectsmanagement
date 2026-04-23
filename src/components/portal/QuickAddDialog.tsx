@@ -130,7 +130,7 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl">
+      <DialogContent className="max-h-[90vh] max-w-xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Quick add</DialogTitle>
           <DialogDescription>Create a task or project in seconds.</DialogDescription>

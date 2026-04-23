@@ -123,6 +123,7 @@ interface DataCtx {
   pushActivity: (a: Omit<Activity, "id" | "time">) => void;
   pushNotification: (a: Omit<Activity, "id" | "time"> & { recipientUserId?: string; kind?: Notification["kind"] }) => void;
   markAllRead: () => void;
+  clearNotifications: () => void;
   decideTaskApproval: (
     taskId: string,
     decision: "Approved" | "Rejected" | "Returned for Revision",
@@ -221,9 +222,10 @@ const isUpcoming = (isoDate: string, windowDays = 3) => {
 };
 
 const recomputeProgress = (project: Project): Project => {
-  const total = project.milestones.length;
-  if (!total) return project;
-  const done = project.milestones.filter((milestone) => milestone.done).length;
+  const trackedItems = project.subtasks?.length ? project.subtasks : project.milestones;
+  const total = trackedItems.length;
+  if (!total) return { ...project, progress: 0 };
+  const done = trackedItems.filter((item) => item.done).length;
   return { ...project, progress: Math.round((done / total) * 100) };
 };
 
@@ -736,6 +738,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     );
   }, [currentUser.id]);
 
+  const clearNotifications = useCallback(() => {
+    setNotifications((items) =>
+      items.filter((item) => item.recipientUserId && item.recipientUserId !== currentUser.id)
+    );
+  }, [currentUser.id]);
+
   const decideTaskApproval: DataCtx["decideTaskApproval"] = useCallback(
     (taskId, decision, comment) => {
       let decidedTask: Task | null = null;
@@ -1245,6 +1253,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       pushActivity,
       pushNotification,
       markAllRead,
+      clearNotifications,
       decideTaskApproval,
       decideProjectApproval,
       addTaskApprovalComment,
@@ -1286,6 +1295,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       pushActivity,
       pushNotification,
       markAllRead,
+      clearNotifications,
       decideTaskApproval,
       decideProjectApproval,
       addTaskApprovalComment,
