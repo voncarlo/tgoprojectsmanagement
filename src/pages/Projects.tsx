@@ -41,8 +41,8 @@ const getNextProjectStatus = (project: Pick<Project, "status" | "milestones" | "
   if (project.status === "Completed" || (project.status === "Planning" && progress > 0)) return "Active";
   return project.status;
 };
-const canManageProjectWork = (project: Project, userName: string) =>
-  project.owner === userName || (project.coOwners ?? []).includes(userName);
+const canManageProjectWork = (project: Project, userName: string, isManager: boolean) =>
+  isManager || project.owner === userName || (project.coOwners ?? []).includes(userName);
 const sortProjectSubtasks = (subtasks: Subtask[]) => [...subtasks].sort((left, right) => Number(left.done) - Number(right.done));
 
 const Projects = () => {
@@ -144,7 +144,7 @@ const Projects = () => {
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {list.map((project) => {
           const team = teams.find((entry) => entry.id === project.team)!;
-          const canManageWork = canManageProjectWork(project, currentUser.name);
+          const canManageWork = canManageProjectWork(project, currentUser.name, isManager);
           const subtasks = sortProjectSubtasks(project.subtasks ?? []);
           const memberCount = project.coOwners?.length ?? 0;
 
@@ -248,6 +248,7 @@ const Projects = () => {
             const isProjectOwner = selectedProject.owner === currentUser.name;
             const isProjectCoOwner = (selectedProject.coOwners ?? []).includes(currentUser.name);
             const canManageWork = isProjectOwner || isProjectCoOwner;
+            const canEditSubtasks = canManageProjectWork(selectedProject, currentUser.name, isManager);
             const canDecide = isManager;
             const showApprovalActions = canDecide && selectedProject.approvalStatus === "Pending Approval";
             const coOwnerCandidates = userList.filter((user) =>
@@ -484,10 +485,10 @@ const Projects = () => {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Subtasks</p>
-                    {!canManageWork && <span className="text-[10px] text-muted-foreground">Team lead or members can update subtasks</span>}
+                    {!canEditSubtasks && <span className="text-[10px] text-muted-foreground">Team lead, members, or manager-level roles can update subtasks</span>}
                   </div>
 
-                  {canManageWork && (
+                  {canEditSubtasks && (
                     <div className="flex gap-2">
                       <Input
                         value={newSubtaskTitle}
@@ -520,14 +521,14 @@ const Projects = () => {
                           <span className="text-muted-foreground">•</span>
                           <button
                             type="button"
-                            disabled={!canManageWork}
+                            disabled={!canEditSubtasks}
                             onClick={() => {
                               const nextSubtasks = sortProjectSubtasks((selectedProject.subtasks ?? []).map((item) =>
                                 item.id === subtask.id ? { ...item, done: !item.done } : item
                               ));
                               updateSelectedSubtasks(nextSubtasks, { allowStatusChange: isProjectOwner });
                             }}
-                            className={cn("shrink-0", !canManageWork && "cursor-not-allowed")}
+                            className={cn("shrink-0", !canEditSubtasks && "cursor-not-allowed")}
                           >
                             {subtask.done
                               ? <CheckCircle2 className="h-3.5 w-3.5 text-success shrink-0" />
@@ -535,7 +536,7 @@ const Projects = () => {
                           </button>
                           <Input
                             value={subtask.title}
-                            disabled={!canManageWork}
+                            disabled={!canEditSubtasks}
                             onChange={(event) => {
                               const nextSubtasks = (selectedProject.subtasks ?? []).map((item) =>
                                 item.id === subtask.id ? { ...item, title: event.target.value } : item
@@ -544,7 +545,7 @@ const Projects = () => {
                             }}
                             className={cn("border-0 bg-transparent px-0 text-xs shadow-none focus-visible:ring-0", subtask.done && "line-through text-muted-foreground")}
                           />
-                          {canManageWork && (
+                          {canEditSubtasks && (
                             <Button
                               type="button"
                               variant="ghost"

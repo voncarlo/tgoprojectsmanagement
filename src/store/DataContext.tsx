@@ -118,7 +118,7 @@ interface DataCtx {
   addTask: (t: Omit<Task, "id">) => Task | null;
   updateTask: (id: string, patch: Partial<Task>) => void;
   removeTask: (id: string) => void;
-  addProject: (p: Omit<Project, "id" | "milestones"> & { milestones?: Milestone[] }) => Project;
+  addProject: (p: Omit<Project, "id" | "milestones"> & { milestones?: Milestone[] }) => Project | null;
   updateProject: (id: string, patch: Partial<Project>) => void;
   removeProject: (id: string) => void;
   toggleMilestone: (projectId: string, name: string) => void;
@@ -251,6 +251,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const auth = useAuth();
   const currentUser = auth.currentUser;
   const canDirectTaskCreate = auth.can("task.create");
+  const canDirectProjectCreate = auth.can("project.create");
   const initialState = loadState();
 
   const [tasks, setTasks] = useState<Task[]>(initialState.tasks);
@@ -616,19 +617,55 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
   const addProject: DataCtx["addProject"] = useCallback(
     (projectInput) => {
-      const requiresApproval = roleNeedsApproval(currentUser.role);
-      const next: Project = {
+      const normalizedProject = recomputeProgress({
         ...projectInput,
-        id: id("p"),
         milestones: projectInput.milestones ?? [],
         coOwners: normalizeCoOwners(projectInput.coOwners),
+        requiresApproval: false,
+        approver: undefined,
+        approvalHistory: [],
+        subtasks: sortOpenSubtasksFirst(projectInput.subtasks),
+      } as Project);
+
+      if (!canDirectProjectCreate) {
+        const approval: Approval = {
+          id: id("ap"),
+          type: "Project",
+          title: normalizedProject.name,
+          requester: currentUser.name,
+          requestedById: currentUser.id,
+          team: normalizedProject.team,
+          status: "Pending",
+          submitted: todayIso(),
+          notes: normalizedProject.description,
+          projectDraft: {
+            ...normalizedProject,
+            requiresApproval: false,
+            approvalStatus: undefined,
+            approvalHistory: [],
+          },
+        };
+        setApprovals((items) => [approval, ...items]);
+        pushActivity({ user: currentUser.name, action: "requested project", target: normalizedProject.name });
+        appendAudit({
+          user: currentUser.name,
+          action: "Submitted project request",
+          target: normalizedProject.name,
+          category: "Approval",
+          team: normalizedProject.team,
+        });
+        return null;
+      }
+
+      const requiresApproval = roleNeedsApproval(currentUser.role);
+      const next: Project = {
+        ...normalizedProject,
+        id: id("p"),
         requiresApproval,
         approver: requiresApproval ? projectInput.approver : undefined,
         approvalHistory: [],
-        subtasks: sortOpenSubtasksFirst(projectInput.subtasks),
       };
-      const withProgress = recomputeProgress(next);
-      setProjects((items) => [withProgress, ...items]);
+      setProjects((items) => [next, ...items]);
       pushActivity({ user: currentUser.name, action: "created project", target: next.name });
       appendAudit({
         user: currentUser.name,
@@ -637,9 +674,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         category: "Project",
         team: next.team,
       });
-      return withProgress;
+      return next;
     },
-    [appendAudit, currentUser.name, currentUser.role, pushActivity]
+    [appendAudit, canDirectProjectCreate, currentUser.id, currentUser.name, currentUser.role, pushActivity]
   );
 
   const updateProject: DataCtx["updateProject"] = useCallback(
@@ -1197,6 +1234,32 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           target: createdTask.title,
           category: "Approval",
           team: createdTask.team,
+        });
+      }
+      if (updatedApproval.projectDraft && status === "Approved") {
+        const createdProject: Project = recomputeProgress({
+          ...updatedApproval.projectDraft,
+          id: id("p"),
+          milestones: updatedApproval.projectDraft.milestones ?? [],
+          coOwners: normalizeCoOwners(updatedApproval.projectDraft.coOwners),
+          requiresApproval: false,
+          approver: undefined,
+          approvalStatus: undefined,
+          approvalHistory: [],
+          subtasks: sortOpenSubtasksFirst(updatedApproval.projectDraft.subtasks),
+        });
+        setProjects((items) => [createdProject, ...items]);
+        pushActivity({
+          user: currentUser.name,
+          action: "approved project request",
+          target: createdProject.name,
+        });
+        appendAudit({
+          user: currentUser.name,
+          action: "Approved project request",
+          target: createdProject.name,
+          category: "Approval",
+          team: createdProject.team,
         });
       }
       if (updatedApproval.projectId) {

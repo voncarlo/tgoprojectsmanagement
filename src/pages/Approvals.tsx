@@ -176,6 +176,44 @@ const Approvals = () => {
                     </div>
                   </div>
                 )}
+                {open.projectDraft && (
+                  <div className="space-y-3 rounded-lg border border-border/60 bg-muted/20 p-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium mb-1">Team Lead</p>
+                        <p className="text-sm">{open.projectDraft.owner}</p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium mb-1">Members</p>
+                        <p className="text-sm">{open.projectDraft.coOwners?.length ? open.projectDraft.coOwners.join(", ") : "No members yet"}</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium mb-1">Start</p>
+                        <p className="text-sm">{open.projectDraft.start}</p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium mb-1">End</p>
+                        <p className="text-sm">{open.projectDraft.end}</p>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium mb-1">Subtasks</p>
+                      <div className="space-y-1.5">
+                        {open.projectDraft.subtasks?.length ? (
+                          open.projectDraft.subtasks.map((subtask) => (
+                            <div key={subtask.id} className="rounded-md border border-border/60 bg-background px-3 py-2 text-xs">
+                              {subtask.title}
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-xs text-muted-foreground">No subtasks added.</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
                 {open.amount && <div><p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Amount</p><p className="text-2xl font-semibold">${open.amount.toLocaleString()}</p></div>}
                 {open.notes && <div><p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium mb-1">Notes</p><p className="text-sm">{open.notes}</p></div>}
 

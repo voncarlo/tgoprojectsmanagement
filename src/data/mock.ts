@@ -304,6 +304,7 @@ export interface Approval {
   notes?: string;
   requestedById?: string;
   taskDraft?: Omit<Task, "id">;
+  projectDraft?: Omit<Project, "id">;
   calendarEventDraft?: Omit<CalendarEvent, "id">;
 }
 

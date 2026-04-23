@@ -31,6 +31,7 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
   const { addTask, addProject } = useData();
   const teamsAvailable = teams.filter((team) => visibleTeams.includes(team.id));
   const initialTeam = defaultTeam ?? (teamsAvailable[0]?.id ?? currentUser.team);
+  const canCreateProjectDirectly = can("project.create");
   const creatorNeedsApproval = currentUser.role === "Staff";
 
   const [tab, setTab] = useState<"task" | "project">(defaultTab);
@@ -112,7 +113,7 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
       end: pEnd,
       subtasks: pSubtasks,
     });
-    toast.success("Project created");
+    toast.success(createdProject ? "Project created" : "Project request sent for approval");
     reset();
     onOpenChange(false);
   };
@@ -346,18 +347,22 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
                   <ShieldCheck className="h-4 w-4" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium">Completion approval</p>
+                  <p className="text-sm font-medium">{canCreateProjectDirectly ? "Completion approval" : "Request approval"}</p>
                   <p className="text-xs text-muted-foreground">
-                    {creatorNeedsApproval
-                      ? "Staff-created projects go to any manager, admin, or super admin when marked complete."
-                      : "Projects created by managers, admins, and super admins can be completed without extra approval."}
+                    {canCreateProjectDirectly
+                      ? creatorNeedsApproval
+                        ? "Staff-created projects go to any manager, admin, or super admin when marked complete."
+                        : "Projects created by managers, admins, and super admins can be completed without extra approval."
+                      : "Staff project requests go to Approvals first and stay off the Projects page until approved."}
                   </p>
                 </div>
               </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button className="gradient-primary text-primary-foreground" onClick={submitProject}>Create project</Button>
+              <Button className="gradient-primary text-primary-foreground" onClick={submitProject}>
+                {canCreateProjectDirectly ? "Create project" : "Request project"}
+              </Button>
             </DialogFooter>
           </TabsContent>
         </Tabs>
