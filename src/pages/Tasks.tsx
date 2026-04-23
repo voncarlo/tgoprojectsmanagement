@@ -61,10 +61,11 @@ const canMoveTaskToStatus = (task: Task, status: TaskStatus, options: { canEditT
   if (status === "Completed") return options.canMarkCompleted;
   return true;
 };
+const MENTION_QUERY_REGEX = /(?:^|\s)@([a-zA-Z][a-zA-Z\s]*)$/;
 
 const Tasks = () => {
-  const { visibleTeams, currentUser, can } = useAuth();
-  const { tasks, updateTask, removeTask, addTask, decideTaskApproval, addTaskApprovalComment } = useData();
+  const { visibleTeams, currentUser, can, userList } = useAuth();
+  const { tasks, updateTask, removeTask, addTask, decideTaskApproval, addTaskApprovalComment, pushNotification, pushActivity } = useData();
   const { isManager } = useAuth();
   const teamsVisible = teams.filter((t) => visibleTeams.includes(t.id));
   const canDeleteTask = can("task.delete");
@@ -80,6 +81,10 @@ const Tasks = () => {
   const [dragId, setDragId] = useState<string | null>(null);
   const [dragOverCol, setDragOverCol] = useState<TaskStatus | null>(null);
   const [comment, setComment] = useState("");
+  const commentMentionQuery = comment.match(MENTION_QUERY_REGEX)?.[1]?.trim().toLowerCase() ?? "";
+  const mentionSuggestions = commentMentionQuery
+    ? userList.filter((user) => user.id !== currentUser.id && user.name.toLowerCase().includes(commentMentionQuery)).slice(0, 5)
+    : [];
 
   const visible = useMemo(() => tasks.filter((t) => visibleTeams.includes(t.team)), [tasks, visibleTeams]);
 
@@ -152,8 +157,27 @@ const Tasks = () => {
 
   const submitComment = () => {
     if (!comment.trim() || !open) return;
+    const mentionedUsers = userList.filter(
+      (user) => user.id !== currentUser.id && comment.toLowerCase().includes(`@${user.name.toLowerCase()}`)
+    );
+    mentionedUsers.forEach((user) => {
+      pushNotification({
+        user: currentUser.name,
+        action: "mentioned you in a comment on",
+        target: open.title,
+        recipientUserId: user.id,
+      });
+    });
+    pushActivity({ user: currentUser.name, action: "commented on", target: open.title });
     toast.success("Comment posted");
     setComment("");
+  };
+
+  const insertMention = (userName: string) => {
+    setComment((current) => current.replace(MENTION_QUERY_REGEX, (match, query, offset) => {
+      const prefix = offset > 0 && current[offset - 1] === " " ? " " : match.startsWith(" ") ? " " : "";
+      return `${prefix}@${userName} `;
+    }));
   };
 
   return (
@@ -555,9 +579,24 @@ const Tasks = () => {
                       value={comment}
                       onChange={(e) => setComment(e.target.value)}
                       onKeyDown={(e) => e.key === "Enter" && submitComment()}
-                      placeholder="Write a comment…"
+                      placeholder="Write a comment… Use @Name to mention someone"
                       className="w-full h-9 pl-3 pr-16 text-xs rounded-lg bg-muted/40 border border-transparent focus:bg-background focus:border-border outline-none"
                     />
+                    {mentionSuggestions.length > 0 && (
+                      <div className="absolute left-0 right-0 top-11 z-10 rounded-lg border border-border bg-background shadow-elegant">
+                        {mentionSuggestions.map((user) => (
+                          <button
+                            key={user.id}
+                            type="button"
+                            onClick={() => insertMention(user.name)}
+                            className="flex w-full items-center justify-between px-3 py-2 text-left text-xs hover:bg-muted/40"
+                          >
+                            <span className="font-medium text-foreground">{user.name}</span>
+                            <span className="text-muted-foreground">{teams.find((team) => team.id === user.team)?.name ?? user.team}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                     <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
                       <button className="h-7 w-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted flex items-center justify-center"><Paperclip className="h-3.5 w-3.5" /></button>
                       <button onClick={submitComment} className="h-7 w-7 rounded-md text-primary hover:bg-primary/10 flex items-center justify-center"><Send className="h-3.5 w-3.5" /></button>

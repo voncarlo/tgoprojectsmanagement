@@ -62,7 +62,7 @@ const Notifications = () => {
       {list.length === 0 ? (
         <EmptyState icon={BellOff} title="You're all caught up" description="New notifications will appear here." />
       ) : (
-        <Card className="divide-y divide-border">
+        <Card className="max-h-[70vh] overflow-y-auto divide-y divide-border">
           {list.map((n) => (
             <div key={n.id} className={cn("flex items-start gap-3 p-4 hover:bg-muted/30 transition-smooth", !n.read && "bg-primary/[0.03]")}>
               <div className={cn("h-9 w-9 rounded-full flex items-center justify-center text-[11px] font-semibold shrink-0",

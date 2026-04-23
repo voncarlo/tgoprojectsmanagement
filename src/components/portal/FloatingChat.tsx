@@ -8,6 +8,7 @@ import { useAuth } from "@/auth/AuthContext";
 import { useData } from "@/store/DataContext";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { teams } from "@/data/mock";
 
 interface FloatingChatProps {
   open: boolean;
@@ -26,6 +27,7 @@ export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
   const [view, setView] = useState<"chats" | "contacts">("chats");
   const [attachment, setAttachment] = useState<{ name: string; size: string; dataUrl?: string; mimeType?: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const departmentLabel = (teamId: string) => teams.find((team) => team.id === teamId)?.name ?? teamId;
 
   const downloadAttachment = (name: string, dataUrl?: string) => {
     if (!dataUrl) {
@@ -40,7 +42,7 @@ export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
 
   const filteredContacts = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return contacts.filter((user) => q === "" || user.name.toLowerCase().includes(q) || user.role.toLowerCase().includes(q));
+    return contacts.filter((user) => q === "" || user.name.toLowerCase().includes(q) || departmentLabel(user.team).toLowerCase().includes(q));
   }, [contacts, query]);
 
   const launcherItems = useMemo(
@@ -133,7 +135,7 @@ export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
                 </Avatar>
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold">{selectedUser.name}</p>
-                  <p className="truncate text-xs text-muted-foreground">{selectedUser.role}</p>
+                  <p className="truncate text-xs text-muted-foreground">{departmentLabel(selectedUser.team)}</p>
                 </div>
               </div>
               <div className="flex items-center gap-1">
@@ -325,7 +327,7 @@ export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
                       )}
                     </div>
                     <p className="truncate text-xs text-muted-foreground">
-                      {view === "chats" ? lastMessage?.body ?? "Start a conversation" : user.role}
+                      {view === "chats" ? lastMessage?.body ?? "Start a conversation" : departmentLabel(user.team)}
                     </p>
                   </div>
                 </button>

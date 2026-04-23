@@ -19,7 +19,6 @@ import { CommandPalette } from "@/components/portal/CommandPalette";
 import { FloatingChat } from "@/components/portal/FloatingChat";
 import { useTheme } from "@/hooks/use-theme";
 import { toast } from "sonner";
-import { RoleBadge } from "@/components/rbac/RoleBadge";
 import { MobileSidebar } from "./Sidebar";
 
 const titles: Record<string, { title: string; subtitle: string }> = {
@@ -94,7 +93,7 @@ export const Topbar = () => {
           <h1 className="text-lg font-semibold tracking-tight text-foreground">{meta.title}</h1>
           <p className="text-xs text-muted-foreground">{meta.subtitle}</p>
         </div>
-        <RoleBadge role={currentUser.role} className="hidden md:inline-flex" />
+        <Badge variant="outline" className="hidden md:inline-flex">{team}</Badge>
 
         <div className="ml-auto flex items-center gap-2">
           <button
@@ -162,22 +161,24 @@ export const Topbar = () => {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              {notifications.length === 0 && (
-                <div className="p-4 text-xs text-center text-muted-foreground">You're all caught up.</div>
-              )}
-              {notifications.slice(0, 8).map((item) => (
-                <DropdownMenuItem key={item.id} className="flex items-start gap-2 py-2.5">
-                  {!item.read && <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-accent shrink-0" />}
-                  <div className="flex flex-col items-start gap-0.5 flex-1">
-                    <span className="text-xs">
-                      <span className="font-medium text-foreground">{item.user}</span>{" "}
-                      <span className="text-muted-foreground">{item.action}</span>{" "}
-                      <span className="font-medium text-foreground">{item.target}</span>
-                    </span>
-                    <span className="text-[10px] text-muted-foreground">{item.time}</span>
-                  </div>
-                </DropdownMenuItem>
-              ))}
+              <div className="max-h-80 overflow-y-auto">
+                {notifications.length === 0 && (
+                  <div className="p-4 text-xs text-center text-muted-foreground">You're all caught up.</div>
+                )}
+                {notifications.slice(0, 8).map((item) => (
+                  <DropdownMenuItem key={item.id} className="flex items-start gap-2 py-2.5">
+                    {!item.read && <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-accent shrink-0" />}
+                    <div className="flex flex-col items-start gap-0.5 flex-1">
+                      <span className="text-xs">
+                        <span className="font-medium text-foreground">{item.user}</span>{" "}
+                        <span className="text-muted-foreground">{item.action}</span>{" "}
+                        <span className="font-medium text-foreground">{item.target}</span>
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">{item.time}</span>
+                    </div>
+                  </DropdownMenuItem>
+                ))}
+              </div>
             </DropdownMenuContent>
           </DropdownMenu>
 
@@ -202,7 +203,7 @@ export const Topbar = () => {
                       <span className="truncate text-sm font-semibold text-foreground">{currentUser.name}</span>
                       <Sparkles className="h-3.5 w-3.5 shrink-0 text-primary" />
                     </div>
-                    <p className="mt-1 text-xs font-normal text-muted-foreground">{currentUser.role} · {team}</p>
+                    <p className="mt-1 text-xs font-normal text-muted-foreground">{team}</p>
                     <div className="mt-2 inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary">
                       Account center
                     </div>

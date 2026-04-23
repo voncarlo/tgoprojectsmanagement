@@ -40,6 +40,7 @@ const Dashboard = () => {
   const { tasks, projects, notifications, approvals } = useData();
   const role = currentUser.role;
   const isExecutive = role === "Super Admin" || role === "Admin";
+  const primaryDepartment = teams.find((team) => team.id === currentUser.team)?.name ?? currentUser.team;
   const myTasks = tasks.filter(t => visibleTeams.includes(t.team));
   const myProjects = projects.filter(p => visibleTeams.includes(p.team));
   const teamWorkload = teams
@@ -84,7 +85,7 @@ const Dashboard = () => {
         description={isExecutive ? "Executive overview — projects, teams, approvals and AI insights." : "Your work, deadlines and team activity at a glance."}
         actions={
           <>
-            <Badge variant="outline" className="hidden sm:inline-flex">{role}</Badge>
+            <Badge variant="outline" className="hidden sm:inline-flex">{primaryDepartment}</Badge>
             <Button asChild size="sm" variant="outline"><Link to="/approvals">Approvals · {pendingApprovals.length}</Link></Button>
             <Button asChild size="sm"><Link to="/tasks">Open my work</Link></Button>
           </>

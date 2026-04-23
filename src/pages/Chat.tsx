@@ -10,6 +10,7 @@ import { useAuth } from "@/auth/AuthContext";
 import { useData } from "@/store/DataContext";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { teams } from "@/data/mock";
 
 const Chat = () => {
   const { currentUser, userList } = useAuth();
@@ -21,6 +22,7 @@ const Chat = () => {
   const [editingBody, setEditingBody] = useState("");
   const [attachment, setAttachment] = useState<{ name: string; size: string; dataUrl?: string; mimeType?: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const departmentLabel = (teamId: string) => teams.find((team) => team.id === teamId)?.name ?? teamId;
 
   const downloadAttachment = (name: string, dataUrl?: string) => {
     if (!dataUrl) {
@@ -114,7 +116,7 @@ const Chat = () => {
                   </Avatar>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{user.name}</p>
-                    <p className="truncate text-xs text-muted-foreground">{user.role}</p>
+                    <p className="truncate text-xs text-muted-foreground">{departmentLabel(user.team)}</p>
                   </div>
                 </div>
               </button>
@@ -130,7 +132,7 @@ const Chat = () => {
                 </Avatar>
                 <div>
                   <p className="font-medium">{selectedUser?.name}</p>
-                  <p className="text-xs text-muted-foreground">{selectedUser?.role}</p>
+                  <p className="text-xs text-muted-foreground">{selectedUser ? departmentLabel(selectedUser.team) : ""}</p>
                 </div>
               </div>
             </div>
