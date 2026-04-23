@@ -2,6 +2,7 @@ import { query } from "./db.mjs";
 import { seedUsers, seedTasks, seedProjects } from "./seed-data.mjs";
 
 const AUTH_META_KEY = "auth_meta";
+const LEGACY_AUTH_KEY = "auth";
 
 const parseJson = (value, fallback) => {
   if (!value) return fallback;
@@ -106,6 +107,10 @@ const saveAuthMeta = async (currentUserId) => {
      ON DUPLICATE KEY UPDATE state_json = VALUES(state_json)`,
     [AUTH_META_KEY, JSON.stringify({ currentUserId })]
   );
+};
+
+const deleteStateSnapshot = async (stateKey) => {
+  await query("DELETE FROM state_snapshots WHERE state_key = ?", [stateKey]);
 };
 
 export const seedDatabase = async () => {
@@ -251,21 +256,34 @@ export const saveAuthState = async (payload) => {
 };
 
 export const migrateLegacyAuthSnapshot = async () => {
-  const legacy = await getStateSnapshot("auth");
+  const legacy = await getStateSnapshot(LEGACY_AUTH_KEY);
   if (!legacy?.userList?.length) return false;
 
-  const userCountRows = await query("SELECT COUNT(*) AS count FROM users");
-  const credentialCountRows = await query("SELECT COUNT(*) AS count FROM user_credentials");
-  const shouldMigrate =
-    Number(userCountRows[0]?.count ?? 0) <= 1 || Number(credentialCountRows[0]?.count ?? 0) === 0;
+  const authMeta = await getStateSnapshot(AUTH_META_KEY);
+  if (authMeta?.legacyMigratedAt) return false;
 
-  if (!shouldMigrate) return false;
+  await query("DELETE FROM user_credentials");
+  await query("DELETE FROM users");
 
   await saveAuthState({
     currentUserId: legacy.currentUserId ?? legacy.userList[0]?.id ?? "",
     passwords: legacy.passwords ?? {},
     userList: legacy.userList,
   });
+
+  await query(
+    `INSERT INTO state_snapshots (state_key, state_json)
+     VALUES (?, ?)
+     ON DUPLICATE KEY UPDATE state_json = VALUES(state_json)`,
+    [
+      AUTH_META_KEY,
+      JSON.stringify({
+        currentUserId: legacy.currentUserId ?? legacy.userList[0]?.id ?? "",
+        legacyMigratedAt: new Date().toISOString(),
+      }),
+    ]
+  );
+  await deleteStateSnapshot(LEGACY_AUTH_KEY);
 
   return true;
 };
