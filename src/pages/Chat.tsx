@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Paperclip, Pencil, Send, Trash2, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ import { toast } from "sonner";
 
 const Chat = () => {
   const { currentUser, userList } = useAuth();
-  const { chats, sendChatMessage, updateChatMessage, removeChatMessage } = useData();
+  const { chats, sendChatMessage, updateChatMessage, removeChatMessage, markChatsRead } = useData();
   const contacts = userList.filter((user) => user.id !== currentUser.id && user.status === "Active");
   const [selectedId, setSelectedId] = useState(contacts[0]?.id ?? "");
   const [message, setMessage] = useState("");
@@ -44,6 +44,10 @@ const Chat = () => {
       ),
     [chats, currentUser.id, selectedUser]
   );
+
+  useEffect(() => {
+    markChatsRead();
+  }, [markChatsRead, selectedId]);
 
   const submit = () => {
     if (!selectedUser || (!message.trim() && !attachment)) return;

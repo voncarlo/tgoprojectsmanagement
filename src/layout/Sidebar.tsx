@@ -9,6 +9,7 @@ import { Logo } from "@/components/portal/Logo";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/auth/AuthContext";
 import type { ModuleKey } from "@/data/mock";
+import { useData } from "@/store/DataContext";
 import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -82,6 +83,7 @@ const SidebarInner = ({ collapsed, setCollapsed, onNavigate, hideCollapseToggle 
   const location = useLocation();
   const navigate = useNavigate();
   const { canAccess, can, isAdmin } = useAuth();
+  const { unreadChatCount } = useData();
 
   const visibleSections = useMemo(
     () =>
@@ -152,6 +154,12 @@ const SidebarInner = ({ collapsed, setCollapsed, onNavigate, hideCollapseToggle 
         )}
         <item.icon className={cn("h-[17px] w-[17px] shrink-0", active && "text-sidebar-primary")} />
         {!collapsed && <span className="truncate">{item.label}</span>}
+        {item.to === "/chat" && unreadChatCount > 0 && (
+          <span className={cn(
+            "inline-flex rounded-full bg-accent",
+            collapsed ? "absolute right-2 top-2 h-2.5 w-2.5" : "ml-auto h-2.5 w-2.5"
+          )} />
+        )}
       </NavLink>
     );
 

@@ -97,6 +97,7 @@ interface PersistedDataState {
   calendarEvents: CalendarEvent[];
   recycleBin: RecycleBinItem[];
   chats: ChatMessage[];
+  chatReadAtByUser: Record<string, string>;
   personalNotes: PersonalNote[];
 }
 
@@ -105,6 +106,7 @@ interface DataCtx {
   projects: Project[];
   notifications: Notification[];
   unreadCount: number;
+  unreadChatCount: number;
   approvals: Approval[];
   documents: DocumentFile[];
   automations: AutomationRule[];
@@ -148,6 +150,7 @@ interface DataCtx {
   removeCalendarEvent: (id: string) => void;
   requestCalendarPto: (event: Omit<CalendarEvent, "id">) => void;
   clearAuditLog: () => void;
+  markChatsRead: () => void;
   sendChatMessage: (
     recipientId: string,
     body: string,
@@ -178,6 +181,7 @@ const defaultState: PersistedDataState = {
   calendarEvents: seedCalendarEvents,
   recycleBin: [],
   chats: [],
+  chatReadAtByUser: {},
   personalNotes: [],
 };
 
@@ -198,6 +202,7 @@ const loadState = (): PersistedDataState => {
       calendarEvents: parsed.calendarEvents?.length ? parsed.calendarEvents : defaultState.calendarEvents,
       recycleBin: parsed.recycleBin ?? defaultState.recycleBin,
       chats: parsed.chats ?? defaultState.chats,
+      chatReadAtByUser: parsed.chatReadAtByUser ?? defaultState.chatReadAtByUser,
       personalNotes: parsed.personalNotes ?? defaultState.personalNotes,
     };
   } catch {
@@ -253,6 +258,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>(initialState.calendarEvents);
   const [recycleBin, setRecycleBin] = useState<RecycleBinItem[]>(initialState.recycleBin);
   const [chats, setChats] = useState<ChatMessage[]>(initialState.chats);
+  const [chatReadAtByUser, setChatReadAtByUser] = useState<Record<string, string>>(initialState.chatReadAtByUser);
   const [personalNotes, setPersonalNotes] = useState<PersonalNote[]>(initialState.personalNotes);
   const [serverHydrated, setServerHydrated] = useState(false);
 
@@ -271,10 +277,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         calendarEvents,
         recycleBin,
         chats,
+        chatReadAtByUser,
         personalNotes,
       } satisfies PersistedDataState)
     );
-  }, [tasks, projects, notifications, approvals, documents, automations, auditLog, calendarEvents, recycleBin, chats, personalNotes]);
+  }, [tasks, projects, notifications, approvals, documents, automations, auditLog, calendarEvents, recycleBin, chats, chatReadAtByUser, personalNotes]);
 
   useEffect(() => {
     let cancelled = false;
@@ -293,6 +300,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         setCalendarEvents(remoteState.calendarEvents ?? defaultState.calendarEvents);
         setRecycleBin(remoteState.recycleBin ?? []);
         setChats(remoteState.chats ?? []);
+        setChatReadAtByUser(remoteState.chatReadAtByUser ?? defaultState.chatReadAtByUser);
         setPersonalNotes(remoteState.personalNotes ?? []);
       } catch {
         // Fallback to local cache when the API is unavailable.
@@ -320,9 +328,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       calendarEvents,
       recycleBin,
       chats,
+      chatReadAtByUser,
       personalNotes,
     });
-  }, [approvals, auditLog, automations, calendarEvents, chats, documents, notifications, personalNotes, projects, recycleBin, serverHydrated, tasks]);
+  }, [approvals, auditLog, automations, calendarEvents, chats, chatReadAtByUser, documents, notifications, personalNotes, projects, recycleBin, serverHydrated, tasks]);
 
   useEffect(() => {
     const notificationsEnabled = currentUser.notificationSettings?.enabled ?? true;
@@ -1196,6 +1205,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     setAuditLog([]);
   }, []);
 
+  const markChatsRead: DataCtx["markChatsRead"] = useCallback(() => {
+    setChatReadAtByUser((items) => ({ ...items, [currentUser.id]: new Date().toISOString() }));
+  }, [currentUser.id]);
+
   const sendChatMessage: DataCtx["sendChatMessage"] = useCallback(
     (recipientId, body, attachment) => {
       const text = body.trim();
@@ -1283,12 +1296,24 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       ? []
       : notifications.filter((notification) => !notification.recipientUserId || notification.recipientUserId === currentUser.id);
 
+  const unreadChatCount = useMemo(
+    () =>
+      chats.filter((entry) => {
+        if (entry.recipientId !== currentUser.id || entry.senderId === currentUser.id) return false;
+        const lastReadAt = chatReadAtByUser[currentUser.id];
+        if (!lastReadAt) return true;
+        return new Date(entry.createdAt).getTime() > new Date(lastReadAt).getTime();
+      }).length,
+    [chatReadAtByUser, chats, currentUser.id]
+  );
+
   const value = useMemo<DataCtx>(
     () => ({
       tasks,
       projects,
       notifications: notificationsForUser,
       unreadCount: notificationsForUser.filter((notification) => !notification.read).length,
+      unreadChatCount,
       approvals,
       documents,
       automations,
@@ -1324,6 +1349,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       removeCalendarEvent,
       requestCalendarPto,
       clearAuditLog,
+      markChatsRead,
       sendChatMessage,
       updateChatMessage,
       removeChatMessage,
@@ -1335,6 +1361,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       tasks,
       projects,
       notificationsForUser,
+      unreadChatCount,
       approvals,
       documents,
       automations,
@@ -1370,6 +1397,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       removeCalendarEvent,
       requestCalendarPto,
       clearAuditLog,
+      markChatsRead,
       sendChatMessage,
       updateChatMessage,
       removeChatMessage,

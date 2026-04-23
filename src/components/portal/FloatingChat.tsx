@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MessageSquare, Minimize2, Paperclip, Pencil, Search, Send, Trash2, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -16,7 +16,7 @@ interface FloatingChatProps {
 
 export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
   const { currentUser, userList } = useAuth();
-  const { chats, sendChatMessage, updateChatMessage, removeChatMessage } = useData();
+  const { chats, sendChatMessage, updateChatMessage, removeChatMessage, markChatsRead } = useData();
   const contacts = userList.filter((user) => user.id !== currentUser.id && user.status === "Active");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -71,6 +71,10 @@ export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
         : [],
     [chats, currentUser.id, selectedUser]
   );
+
+  useEffect(() => {
+    if (open) markChatsRead();
+  }, [markChatsRead, open, selectedId]);
 
   const submit = () => {
     if (!selectedUser || (!message.trim() && !attachment)) return;
