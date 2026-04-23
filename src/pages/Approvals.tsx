@@ -26,6 +26,7 @@ const STATUS_TONE: Record<ApprovalStatus, string> = {
 
 const TYPE_TONE = {
   Task: "bg-info/10 text-info",
+  Project: "bg-primary/10 text-primary",
   Leave: "bg-warning/10 text-warning",
   Budget: "bg-primary/10 text-primary",
   Change: "bg-destructive/10 text-destructive",

@@ -142,7 +142,7 @@ const Tasks = () => {
     <div className="space-y-6">
       <PageHeader
         title="Tasks"
-        description="Plan, prioritise, and track work across boards, lists, and timelines."
+        description="Plan, prioritise, and track work across boards, lists, and timelines. Task completion is routed to the respective department manager for approval."
         actions={
           <Button onClick={() => setDialogOpen(true)} className="gradient-primary text-primary-foreground gap-1.5">
             <Plus className="h-4 w-4" /> New task

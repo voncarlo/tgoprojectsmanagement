@@ -66,7 +66,13 @@ const Login = () => {
       <div className="w-full max-w-md animate-fade-in">
         <div className="rounded-2xl border border-border bg-card shadow-soft p-8 sm:p-10 space-y-8">
           <div className="flex justify-center">
-            <Logo variant="default" size={56} />
+            <Logo
+              variant="default"
+              size={72}
+              className="gap-3.5"
+              titleClassName="text-xl sm:text-2xl"
+              subtitleClassName="text-xs sm:text-sm tracking-[0.28em]"
+            />
           </div>
 
           <div className="text-center space-y-2">

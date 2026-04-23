@@ -8,9 +8,18 @@ interface LogoProps {
   size?: number;
   /** Override label colors (e.g. for the light login card). */
   variant?: "sidebar" | "default";
+  titleClassName?: string;
+  subtitleClassName?: string;
 }
 
-export const Logo = ({ collapsed = false, className, size = 36, variant = "sidebar" }: LogoProps) => {
+export const Logo = ({
+  collapsed = false,
+  className,
+  size = 36,
+  variant = "sidebar",
+  titleClassName,
+  subtitleClassName,
+}: LogoProps) => {
   const titleClass =
     variant === "sidebar"
       ? "text-sidebar-foreground"
@@ -31,8 +40,8 @@ export const Logo = ({ collapsed = false, className, size = 36, variant = "sideb
       />
       {!collapsed && (
         <div className="flex flex-col leading-tight">
-          <span className={cn("text-sm font-semibold tracking-tight", titleClass)}>TGO Projects</span>
-          <span className={cn("text-[10px] uppercase tracking-[0.18em]", subClass)}>Portal</span>
+          <span className={cn("text-sm font-semibold tracking-tight", titleClass, titleClassName)}>TGO Projects</span>
+          <span className={cn("text-[10px] uppercase tracking-[0.18em]", subClass, subtitleClassName)}>Portal</span>
         </div>
       )}
     </div>
