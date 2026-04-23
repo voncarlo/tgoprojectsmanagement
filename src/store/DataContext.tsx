@@ -894,58 +894,6 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     [appendAudit, currentUser.name]
   );
 
-  const decideApproval: DataCtx["decideApproval"] = useCallback(
-    (approvalId, status, comment) => {
-      let updatedApproval: Approval | null = null;
-      setApprovals((items) =>
-        items.map((approval) => {
-          if (approval.id !== approvalId) return approval;
-          updatedApproval = { ...approval, status, notes: comment || approval.notes };
-          return updatedApproval;
-        })
-      );
-      if (!updatedApproval) return;
-      if (updatedApproval.taskId) {
-        const taskDecision =
-          status === "Approved"
-            ? "Approved"
-            : status === "Rejected"
-              ? "Rejected"
-              : status === "Returned"
-                ? "Returned for Revision"
-                : null;
-        if (taskDecision) decideTaskApproval(updatedApproval.taskId, taskDecision, comment);
-      }
-      if (updatedApproval.projectId) {
-        const projectDecision =
-          status === "Approved"
-            ? "Approved"
-            : status === "Rejected"
-              ? "Rejected"
-              : status === "Returned"
-                ? "Returned for Revision"
-                : null;
-        if (projectDecision) decideProjectApproval(updatedApproval.projectId, projectDecision, comment);
-      }
-      if (updatedApproval.type === "Leave" && updatedApproval.calendarEventDraft && status === "Approved") {
-        addCalendarEvent(updatedApproval.calendarEventDraft);
-        pushActivity({
-          user: currentUser.name,
-          action: "approved PTO request",
-          target: updatedApproval.title,
-        });
-      }
-      appendAudit({
-        user: currentUser.name,
-        action: `Set approval to ${status}`,
-        target: updatedApproval.title,
-        category: "Approval",
-        team: updatedApproval.team,
-      });
-    },
-    [addCalendarEvent, appendAudit, currentUser.name, decideProjectApproval, decideTaskApproval, pushActivity]
-  );
-
   const addDocument: DataCtx["addDocument"] = useCallback(
     (doc) => {
       const next: DocumentFile = {
@@ -1132,6 +1080,58 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       pushActivity({ user: currentUser.name, action: "submitted PTO request", target: event.title });
     },
     [appendAudit, currentUser.name, currentUser.team, pushActivity]
+  );
+
+  const decideApproval: DataCtx["decideApproval"] = useCallback(
+    (approvalId, status, comment) => {
+      let updatedApproval: Approval | null = null;
+      setApprovals((items) =>
+        items.map((approval) => {
+          if (approval.id !== approvalId) return approval;
+          updatedApproval = { ...approval, status, notes: comment || approval.notes };
+          return updatedApproval;
+        })
+      );
+      if (!updatedApproval) return;
+      if (updatedApproval.taskId) {
+        const taskDecision =
+          status === "Approved"
+            ? "Approved"
+            : status === "Rejected"
+              ? "Rejected"
+              : status === "Returned"
+                ? "Returned for Revision"
+                : null;
+        if (taskDecision) decideTaskApproval(updatedApproval.taskId, taskDecision, comment);
+      }
+      if (updatedApproval.projectId) {
+        const projectDecision =
+          status === "Approved"
+            ? "Approved"
+            : status === "Rejected"
+              ? "Rejected"
+              : status === "Returned"
+                ? "Returned for Revision"
+                : null;
+        if (projectDecision) decideProjectApproval(updatedApproval.projectId, projectDecision, comment);
+      }
+      if (updatedApproval.type === "Leave" && updatedApproval.calendarEventDraft && status === "Approved") {
+        addCalendarEvent(updatedApproval.calendarEventDraft);
+        pushActivity({
+          user: currentUser.name,
+          action: "approved PTO request",
+          target: updatedApproval.title,
+        });
+      }
+      appendAudit({
+        user: currentUser.name,
+        action: `Set approval to ${status}`,
+        target: updatedApproval.title,
+        category: "Approval",
+        team: updatedApproval.team,
+      });
+    },
+    [addCalendarEvent, appendAudit, currentUser.name, decideProjectApproval, decideTaskApproval, pushActivity]
   );
 
   const sendChatMessage: DataCtx["sendChatMessage"] = useCallback(
