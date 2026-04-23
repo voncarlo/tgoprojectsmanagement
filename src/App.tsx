@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import AppLayout from "./layout/AppLayout";
 import { AuthProvider } from "./auth/AuthContext";
 import { DataProvider } from "./store/DataContext";
@@ -37,51 +38,53 @@ import Clients from "./pages/departments/Clients";
 const queryClient = new QueryClient();
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <ThemeProvider>
-      <AuthProvider>
-        <DataProvider>
-          <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Navigate to="/login" replace />} />
-            <Route path="/login" element={<Login />} />
-            <Route element={<AppLayout />}>
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/tasks" element={<Tasks />} />
-              <Route path="/projects" element={<Projects />} />
-              <Route path="/calendar" element={<Calendar />} />
-              <Route path="/workload" element={<Workload />} />
-              <Route path="/reports" element={<Reports />} />
-              <Route path="/documents" element={<Documents />} />
-              <Route path="/notifications" element={<Notifications />} />
-              <Route path="/chat" element={<Chat />} />
-              <Route path="/notes" element={<Notes />} />
-              <Route path="/activity" element={<ActivityLogs />} />
-              <Route path="/approvals" element={<Approvals />} />
-              <Route path="/automations" element={<Automations />} />
-              <Route path="/dispatch" element={<Dispatch />} />
-              <Route path="/recruitment" element={<Recruitment />} />
-              <Route path="/sales" element={<Sales />} />
-              <Route path="/payroll" element={<Payroll />} />
-              <Route path="/bookkeeping" element={<Bookkeeping />} />
-              <Route path="/clients" element={<Clients />} />
-              <Route path="/teams" element={<Teams />} />
-              <Route path="/users" element={<Users />} />
-              <Route path="/recycle-bin" element={<RecycleBin />} />
-              <Route path="/admin" element={<Admin />} />
-              <Route path="/settings" element={<Settings />} />
-            </Route>
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-          </TooltipProvider>
-        </DataProvider>
-      </AuthProvider>
-    </ThemeProvider>
-  </QueryClientProvider>
+  <ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <AuthProvider>
+          <DataProvider>
+            <TooltipProvider>
+              <Toaster />
+              <Sonner />
+              <BrowserRouter>
+                <Routes>
+                  <Route path="/" element={<Navigate to="/login" replace />} />
+                  <Route path="/login" element={<Login />} />
+                  <Route element={<AppLayout />}>
+                    <Route path="/dashboard" element={<Dashboard />} />
+                    <Route path="/tasks" element={<Tasks />} />
+                    <Route path="/projects" element={<Projects />} />
+                    <Route path="/calendar" element={<Calendar />} />
+                    <Route path="/workload" element={<Workload />} />
+                    <Route path="/reports" element={<Reports />} />
+                    <Route path="/documents" element={<Documents />} />
+                    <Route path="/notifications" element={<Notifications />} />
+                    <Route path="/chat" element={<Chat />} />
+                    <Route path="/notes" element={<Notes />} />
+                    <Route path="/activity" element={<ActivityLogs />} />
+                    <Route path="/approvals" element={<Approvals />} />
+                    <Route path="/automations" element={<Automations />} />
+                    <Route path="/dispatch" element={<Dispatch />} />
+                    <Route path="/recruitment" element={<Recruitment />} />
+                    <Route path="/sales" element={<Sales />} />
+                    <Route path="/payroll" element={<Payroll />} />
+                    <Route path="/bookkeeping" element={<Bookkeeping />} />
+                    <Route path="/clients" element={<Clients />} />
+                    <Route path="/teams" element={<Teams />} />
+                    <Route path="/users" element={<Users />} />
+                    <Route path="/recycle-bin" element={<RecycleBin />} />
+                    <Route path="/admin" element={<Admin />} />
+                    <Route path="/settings" element={<Settings />} />
+                  </Route>
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </BrowserRouter>
+            </TooltipProvider>
+          </DataProvider>
+        </AuthProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
+  </ErrorBoundary>
 );
 
 export default App;
