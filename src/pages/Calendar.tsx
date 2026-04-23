@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, CalendarDays, MapPin, Users, Plus } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, MapPin, Plus, Trash2, User, Users } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -7,37 +7,50 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { teams, type CalendarEvent } from "@/data/mock";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { teams, type CalendarEvent, type CalendarEventType } from "@/data/mock";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/portal/PageHeader";
 import { useAuth } from "@/auth/AuthContext";
 import { useData } from "@/store/DataContext";
 import { toast } from "sonner";
 
+const EVENT_TYPES: CalendarEventType[] = ["PTO", "Call-out", "Meeting", "Event", "Deadline"];
+
 const TYPE_TONE: Record<CalendarEvent["type"], string> = {
-  Deadline: "bg-destructive/10 text-destructive border-destructive/20",
+  PTO: "bg-warning/10 text-warning border-warning/20",
+  "Call-out": "bg-destructive/10 text-destructive border-destructive/20",
   Meeting: "bg-info/10 text-info border-info/20",
-  Milestone: "bg-primary/10 text-primary border-primary/20",
-  Leave: "bg-warning/10 text-warning border-warning/20",
+  Event: "bg-primary/10 text-primary border-primary/20",
+  Deadline: "bg-destructive/10 text-destructive border-destructive/20",
 };
 
 const TYPE_DOT: Record<CalendarEvent["type"], string> = {
-  Deadline: "bg-destructive",
+  PTO: "bg-warning",
+  "Call-out": "bg-destructive",
   Meeting: "bg-info",
-  Milestone: "bg-primary",
-  Leave: "bg-warning",
+  Event: "bg-primary",
+  Deadline: "bg-destructive",
 };
 
 const startOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1);
 const daysInMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
 
 const Calendar = () => {
-  const { visibleTeams } = useAuth();
-  const { calendarEvents, addCalendarEvent } = useData();
+  const { visibleTeams, currentUser, isManager, isAdmin, isSuperAdmin } = useAuth();
+  const data = useData();
+  const {
+    calendarEvents,
+    approvals: approvalItems,
+    addCalendarEvent: createCalendarEvent,
+    removeCalendarEvent: deleteCalendarEvent,
+    requestCalendarPto,
+  } = data;
   const [cursor, setCursor] = useState(new Date());
   const [view, setView] = useState<"month" | "week" | "agenda">("month");
   const [filterType, setFilterType] = useState<CalendarEvent["type"] | "all">("all");
   const [open, setOpen] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [title, setTitle] = useState("");
   const [eventType, setEventType] = useState<CalendarEvent["type"]>("Meeting");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
@@ -46,6 +59,17 @@ const Calendar = () => {
   const events = useMemo(
     () => calendarEvents.filter((event) => (!event.team || visibleTeams.includes(event.team)) && (filterType === "all" || event.type === filterType)),
     [calendarEvents, filterType, visibleTeams]
+  );
+
+  const pendingPtoRequests = useMemo(
+    () =>
+      approvalItems.filter(
+        (approval) =>
+          approval.type === "Leave" &&
+          (approval.status === "Pending" || approval.status === "Under Review") &&
+          visibleTeams.includes(approval.team)
+      ),
+    [approvalItems, visibleTeams]
   );
 
   const byDate = useMemo(() => {
@@ -72,29 +96,60 @@ const Calendar = () => {
 
   const createEvent = () => {
     if (!title.trim()) return toast.error("Event title is required");
-    addCalendarEvent({
+
+    const eventDraft: Omit<CalendarEvent, "id"> = {
       title: title.trim(),
       type: eventType,
       date,
-      team: teamId === "none" ? undefined : teamId as CalendarEvent["team"],
-    });
+      team: teamId === "none" ? undefined : (teamId as CalendarEvent["team"]),
+      createdById: currentUser.id,
+      createdByName: currentUser.name,
+    };
+
+    if (eventType === "PTO") {
+      requestCalendarPto(eventDraft);
+      toast.success("PTO request submitted for approval");
+    } else {
+      createCalendarEvent(eventDraft);
+      toast.success("Event created");
+    }
+
     setTitle("");
     setEventType("Meeting");
     setDate(new Date().toISOString().slice(0, 10));
     setTeamId("none");
     setOpen(false);
-    toast.success("Event created");
   };
+
+  const canDeleteEvent =
+    !!selectedEvent &&
+    (selectedEvent.createdById === currentUser.id || isManager || isAdmin || isSuperAdmin);
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Calendar"
-        description="Deadlines, meetings, milestones and team schedules in one view."
+        description="PTO, call-outs, meetings, events, and deadlines in one calendar. PTO entries require approval before they appear here."
         actions={
-          <Button className="gradient-primary text-primary-foreground gap-1.5" onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> New event</Button>
+          <Button className="gradient-primary text-primary-foreground gap-1.5" onClick={() => setOpen(true)}><Plus className="h-4 w-4" /> New entry</Button>
         }
       />
+
+      {pendingPtoRequests.length > 0 && (
+        <Card className="p-4">
+          <p className="text-sm font-medium">Pending PTO requests</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            PTO entries are posted to the calendar only after manager, admin, or super admin approval.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {pendingPtoRequests.map((approval) => (
+              <Badge key={approval.id} variant="outline" className="text-[10px] bg-warning/10 text-warning border-warning/20">
+                {approval.requester} · {approval.submitted}
+              </Badge>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <Card className="p-4">
         <div className="flex flex-wrap items-center gap-3 mb-4">
@@ -117,8 +172,8 @@ const Calendar = () => {
             ))}
           </div>
 
-          <div className="ml-auto flex items-center gap-1.5">
-            {(["all", "Deadline", "Meeting", "Milestone", "Leave"] as const).map((type) => (
+          <div className="ml-auto flex items-center gap-1.5 flex-wrap">
+            {(["all", ...EVENT_TYPES] as const).map((type) => (
               <button
                 key={type}
                 onClick={() => setFilterType(type as typeof filterType)}
@@ -147,9 +202,15 @@ const Calendar = () => {
                     <div className={cn("text-xs font-medium mb-1", isToday ? "text-primary" : "text-foreground")}>{value.getDate()}</div>
                     <div className="space-y-1">
                       {dayEvents.slice(0, 3).map((event) => (
-                        <div key={event.id} className={cn("text-[10px] px-1.5 py-0.5 rounded border truncate cursor-pointer hover:opacity-80 transition", TYPE_TONE[event.type])}>
-                          {event.title}
-                        </div>
+                        <button
+                          type="button"
+                          key={event.id}
+                          onClick={() => setSelectedEvent(event)}
+                          className={cn("w-full text-left text-[10px] px-1.5 py-0.5 rounded border hover:opacity-80 transition", TYPE_TONE[event.type])}
+                        >
+                          <div className="truncate">{event.title}</div>
+                          <div className="truncate opacity-80">by {event.createdByName}</div>
+                        </button>
                       ))}
                       {dayEvents.length > 3 && <div className="text-[10px] text-muted-foreground">+{dayEvents.length - 3} more</div>}
                     </div>
@@ -165,18 +226,24 @@ const Calendar = () => {
             {events.map((event) => {
               const team = teams.find((item) => item.id === event.team);
               return (
-                <div key={event.id} className="flex items-center gap-3 rounded-lg border border-border p-3 hover:bg-muted/30 transition-smooth">
+                <button
+                  type="button"
+                  key={event.id}
+                  onClick={() => setSelectedEvent(event)}
+                  className="w-full flex items-center gap-3 rounded-lg border border-border p-3 hover:bg-muted/30 transition-smooth text-left"
+                >
                   <div className={cn("h-8 w-1 rounded-full", TYPE_DOT[event.type])} />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium">{event.title}</p>
-                    <div className="flex items-center gap-3 text-[11px] text-muted-foreground mt-0.5">
+                    <div className="flex items-center gap-3 text-[11px] text-muted-foreground mt-0.5 flex-wrap">
                       <span className="flex items-center gap-1"><CalendarDays className="h-3 w-3" /> {event.date}</span>
                       {team && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" /> {team.name}</span>}
+                      <span className="flex items-center gap-1"><User className="h-3 w-3" /> {event.createdByName}</span>
                       {event.attendees && <span className="flex items-center gap-1"><Users className="h-3 w-3" /> {event.attendees.length}</span>}
                     </div>
                   </div>
                   <Badge variant="outline" className={cn("text-[10px]", TYPE_TONE[event.type])}>{event.type}</Badge>
-                </div>
+                </button>
               );
             })}
           </div>
@@ -186,8 +253,8 @@ const Calendar = () => {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>New calendar event</DialogTitle>
-            <DialogDescription>Add a deadline, meeting, milestone, or leave block.</DialogDescription>
+            <DialogTitle>New calendar entry</DialogTitle>
+            <DialogDescription>Add a PTO request, call-out, meeting, event, or deadline.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-2">
@@ -200,7 +267,7 @@ const Calendar = () => {
                 <Select value={eventType} onValueChange={(value) => setEventType(value as CalendarEvent["type"])}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {(["Deadline", "Meeting", "Milestone", "Leave"] as const).map((value) => (
+                    {EVENT_TYPES.map((value) => (
                       <SelectItem key={value} value={value}>{value}</SelectItem>
                     ))}
                   </SelectContent>
@@ -223,13 +290,56 @@ const Calendar = () => {
                 </SelectContent>
               </Select>
             </div>
+            <div className="rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+              {eventType === "PTO"
+                ? "PTO requests go to Approvals first. They will only appear on the calendar after approval by a manager, admin, or super admin."
+                : `This ${eventType.toLowerCase()} entry will be posted immediately and shown with your name.`}
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button className="gradient-primary text-primary-foreground" onClick={createEvent}>Save event</Button>
+            <Button className="gradient-primary text-primary-foreground" onClick={createEvent}>
+              {eventType === "PTO" ? "Submit for approval" : "Save entry"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Sheet open={!!selectedEvent} onOpenChange={(isOpen) => !isOpen && setSelectedEvent(null)}>
+        <SheetContent className="w-full sm:max-w-md">
+          {selectedEvent && (
+            <>
+              <SheetHeader>
+                <SheetTitle>{selectedEvent.title}</SheetTitle>
+                <SheetDescription>{selectedEvent.type} on {selectedEvent.date}</SheetDescription>
+              </SheetHeader>
+              <div className="mt-6 space-y-4">
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className={cn("text-[10px]", TYPE_TONE[selectedEvent.type])}>{selectedEvent.type}</Badge>
+                </div>
+                <div className="text-sm space-y-2">
+                  <p className="flex items-center gap-2 text-muted-foreground"><User className="h-4 w-4" /> Posted by <span className="text-foreground font-medium">{selectedEvent.createdByName}</span></p>
+                  <p className="flex items-center gap-2 text-muted-foreground"><CalendarDays className="h-4 w-4" /> {selectedEvent.date}</p>
+                  {selectedEvent.team && <p className="flex items-center gap-2 text-muted-foreground"><MapPin className="h-4 w-4" /> {teams.find((team) => team.id === selectedEvent.team)?.name}</p>}
+                </div>
+                {canDeleteEvent && (
+                  <Button
+                    variant="outline"
+                    className="w-full gap-2 text-destructive hover:text-destructive"
+                    onClick={() => {
+                      deleteCalendarEvent(selectedEvent.id);
+                      toast.success("Calendar entry deleted");
+                      setSelectedEvent(null);
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" /> Delete entry
+                  </Button>
+                )}
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 };

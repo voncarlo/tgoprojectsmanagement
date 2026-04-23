@@ -66,6 +66,7 @@ export type ProjectStatus =
 export type ProjectHealth = "Healthy" | "At Risk" | "Delayed" | "Blocked";
 export type ApprovalType = "Task" | "Project" | "Leave" | "Budget" | "Change" | "Report";
 export type ApprovalStatus = "Pending" | "Under Review" | "Approved" | "Rejected" | "Returned";
+export type CalendarEventType = "PTO" | "Call-out" | "Meeting" | "Event" | "Deadline";
 
 export interface Team {
   id: TeamId;
@@ -295,6 +296,8 @@ export interface Approval {
   amount?: number;
   submitted: string;
   notes?: string;
+  requestedById?: string;
+  calendarEventDraft?: Omit<CalendarEvent, "id">;
 }
 
 export const approvals: Approval[] = [
@@ -373,21 +376,23 @@ export const auditLog: AuditEntry[] = [
 export interface CalendarEvent {
   id: string;
   title: string;
-  type: "Deadline" | "Meeting" | "Milestone" | "Leave";
+  type: CalendarEventType;
   date: string;
   team?: TeamId;
   attendees?: string[];
+  createdById: string;
+  createdByName: string;
 }
 
 export const calendarEvents: CalendarEvent[] = [
-  { id: "ev1", title: "Acme Corp proposal review", type: "Meeting", date: "2025-04-22", team: "sales", attendees: ["Von Carlo Asinas", "James Steffan"] },
-  { id: "ev2", title: "Q2 Fleet pilot launch", type: "Milestone", date: "2025-04-25", team: "dispatch" },
-  { id: "ev3", title: "Vendor invoice deadline", type: "Deadline", date: "2025-04-22", team: "bookkeeping" },
-  { id: "ev4", title: "All-hands sync", type: "Meeting", date: "2025-04-23", attendees: ["James Steffan", "Ryan Lopez", "Von Carlo Asinas", "Alyanna Alonzo"] },
-  { id: "ev5", title: "Alyanna PTO", type: "Leave", date: "2025-04-28", team: "recruitment" },
-  { id: "ev6", title: "Senior backend interview panel", type: "Meeting", date: "2025-04-24", team: "recruitment" },
-  { id: "ev7", title: "Portal Rollout pilot", type: "Milestone", date: "2025-05-02", team: "projects" },
-  { id: "ev8", title: "CRM renewal cutoff", type: "Deadline", date: "2025-04-29", team: "sales" },
+  { id: "ev1", title: "Acme Corp proposal review", type: "Meeting", date: "2025-04-22", team: "sales", attendees: ["Von Carlo Asinas", "James Steffan"], createdById: "u1", createdByName: "Von Carlo Asinas" },
+  { id: "ev2", title: "Q2 Fleet pilot launch", type: "Event", date: "2025-04-25", team: "dispatch", createdById: "u1", createdByName: "Von Carlo Asinas" },
+  { id: "ev3", title: "Vendor invoice deadline", type: "Deadline", date: "2025-04-22", team: "bookkeeping", createdById: "u1", createdByName: "Von Carlo Asinas" },
+  { id: "ev4", title: "All-hands sync", type: "Meeting", date: "2025-04-23", attendees: ["James Steffan", "Ryan Lopez", "Von Carlo Asinas", "Alyanna Alonzo"], createdById: "u1", createdByName: "Von Carlo Asinas" },
+  { id: "ev5", title: "Alyanna PTO", type: "PTO", date: "2025-04-28", team: "recruitment", createdById: "u1", createdByName: "Von Carlo Asinas" },
+  { id: "ev6", title: "Senior backend interview panel", type: "Meeting", date: "2025-04-24", team: "recruitment", createdById: "u1", createdByName: "Von Carlo Asinas" },
+  { id: "ev7", title: "Portal Rollout pilot", type: "Event", date: "2025-05-02", team: "projects", createdById: "u1", createdByName: "Von Carlo Asinas" },
+  { id: "ev8", title: "CRM renewal cutoff", type: "Deadline", date: "2025-04-29", team: "sales", createdById: "u1", createdByName: "Von Carlo Asinas" },
 ];
 
 // AI insights for executive dashboard

@@ -141,6 +141,8 @@ interface DataCtx {
   purgeRecycleItem: (id: string) => void;
   toggleAutomation: (id: string) => void;
   addCalendarEvent: (event: Omit<CalendarEvent, "id">) => CalendarEvent;
+  removeCalendarEvent: (id: string) => void;
+  requestCalendarPto: (event: Omit<CalendarEvent, "id">) => void;
   sendChatMessage: (
     recipientId: string,
     body: string,
@@ -918,6 +920,14 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
                 : null;
         if (projectDecision) decideProjectApproval(updatedApproval.projectId, projectDecision, comment);
       }
+      if (updatedApproval.type === "Leave" && updatedApproval.calendarEventDraft && status === "Approved") {
+        addCalendarEvent(updatedApproval.calendarEventDraft);
+        pushActivity({
+          user: currentUser.name,
+          action: "approved PTO request",
+          target: updatedApproval.title,
+        });
+      }
       appendAudit({
         user: currentUser.name,
         action: `Set approval to ${status}`,
@@ -926,7 +936,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         team: updatedApproval.team,
       });
     },
-    [appendAudit, currentUser.name, decideProjectApproval, decideTaskApproval]
+    [addCalendarEvent, appendAudit, currentUser.name, decideProjectApproval, decideTaskApproval, pushActivity]
   );
 
   const addDocument: DataCtx["addDocument"] = useCallback(
@@ -1068,6 +1078,55 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     [appendAudit, currentUser.name]
   );
 
+  const removeCalendarEvent: DataCtx["removeCalendarEvent"] = useCallback(
+    (eventId) => {
+      let removedEvent: CalendarEvent | null = null;
+      setCalendarEvents((items) =>
+        items.filter((event) => {
+          if (event.id === eventId) removedEvent = event;
+          return event.id !== eventId;
+        })
+      );
+      if (!removedEvent) return;
+      appendAudit({
+        user: currentUser.name,
+        action: "Deleted calendar event",
+        target: removedEvent.title,
+        category: "System",
+        team: removedEvent.team,
+      });
+      pushActivity({ user: currentUser.name, action: "deleted calendar event", target: removedEvent.title });
+    },
+    [appendAudit, currentUser.name, pushActivity]
+  );
+
+  const requestCalendarPto: DataCtx["requestCalendarPto"] = useCallback(
+    (event) => {
+      const approval: Approval = {
+        id: id("ap"),
+        type: "Leave",
+        title: `${event.createdByName} PTO request`,
+        requester: event.createdByName,
+        requestedById: event.createdById,
+        team: event.team ?? currentUser.team,
+        status: "Pending",
+        submitted: todayIso(),
+        notes: event.title,
+        calendarEventDraft: event,
+      };
+      setApprovals((items) => [approval, ...items]);
+      appendAudit({
+        user: currentUser.name,
+        action: "Submitted PTO request",
+        target: event.title,
+        category: "Approval",
+        team: approval.team,
+      });
+      pushActivity({ user: currentUser.name, action: "submitted PTO request", target: event.title });
+    },
+    [appendAudit, currentUser.name, currentUser.team, pushActivity]
+  );
+
   const sendChatMessage: DataCtx["sendChatMessage"] = useCallback(
     (recipientId, body, attachment) => {
       const text = body.trim();
@@ -1189,6 +1248,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       purgeRecycleItem,
       toggleAutomation,
       addCalendarEvent,
+      removeCalendarEvent,
+      requestCalendarPto,
       sendChatMessage,
       updateChatMessage,
       removeChatMessage,
@@ -1228,6 +1289,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       purgeRecycleItem,
       toggleAutomation,
       addCalendarEvent,
+      removeCalendarEvent,
+      requestCalendarPto,
       sendChatMessage,
       updateChatMessage,
       removeChatMessage,
