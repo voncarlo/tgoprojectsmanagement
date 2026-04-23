@@ -295,6 +295,7 @@ export interface Approval {
   requester: string;
   team: TeamId;
   status: ApprovalStatus;
+  hidden?: boolean;
   taskId?: string;
   projectId?: string;
   amount?: number;

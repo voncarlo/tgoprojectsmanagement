@@ -81,14 +81,21 @@ type SidebarInnerProps = {
 const SidebarInner = ({ collapsed, setCollapsed, onNavigate, hideCollapseToggle }: SidebarInnerProps) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { canAccess, isAdmin } = useAuth();
+  const { canAccess, can, isAdmin } = useAuth();
 
   const visibleSections = useMemo(
     () =>
       sections
-        .map((s) => ({ ...s, items: s.items.filter((i) => (i.adminOnly ? isAdmin : canAccess(i.module))) }))
+        .map((s) => ({
+          ...s,
+          items: s.items.filter((i) =>
+            i.to === "/activity"
+              ? can("audit.view")
+              : (i.adminOnly ? isAdmin : canAccess(i.module))
+          ),
+        }))
         .filter((s) => s.items.length > 0),
-    [isAdmin, canAccess]
+    [isAdmin, canAccess, can]
   );
 
   const dashboardVisible = canAccess(dashboardItem.module);

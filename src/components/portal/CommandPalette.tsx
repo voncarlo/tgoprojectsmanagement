@@ -39,7 +39,7 @@ const navItems = [
 export const CommandPalette = ({ open, onOpenChange, onQuickAdd }: Props) => {
   const navigate = useNavigate();
   const { tasks, projects } = useData();
-  const { canAccess, isAdmin } = useAuth();
+  const { canAccess, can, isAdmin } = useAuth();
   const [_, setTick] = useState(0);
 
   // Force command list to refresh when opening
@@ -47,9 +47,13 @@ export const CommandPalette = ({ open, onOpenChange, onQuickAdd }: Props) => {
 
   const allowed = useMemo(() =>
     navItems.filter((i) =>
-      i.path === "/users" || i.path === "/admin" ? isAdmin : canAccess(i.path.slice(1) as any)
+      i.path === "/activity"
+        ? can("audit.view")
+        : i.path === "/users" || i.path === "/admin"
+          ? isAdmin
+          : canAccess(i.path.slice(1) as any)
     ),
-  [canAccess, isAdmin]);
+  [canAccess, can, isAdmin]);
 
   const grouped = useMemo(() => {
     const g: Record<string, typeof navItems> = {};

@@ -144,7 +144,7 @@ const Projects = () => {
           const team = teams.find((entry) => entry.id === project.team)!;
           const canManageWork = canManageProjectWork(project, currentUser.name);
           const subtasks = project.subtasks ?? [];
-          const collaborators = 1 + (project.coOwners?.length ?? 0);
+          const memberCount = project.coOwners?.length ?? 0;
 
           return (
             <Card key={project.id} className="p-5 hover:shadow-elegant transition-smooth gradient-card cursor-pointer" onClick={() => openProject(project)}>
@@ -228,7 +228,7 @@ const Projects = () => {
                   <span className="text-xs text-muted-foreground">{project.owner}</span>
                 </div>
                 <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  <span>{collaborators} owner{collaborators > 1 ? "s" : ""}</span>
+                  <span>{memberCount} member{memberCount !== 1 ? "s" : ""}</span>
                   <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{project.end.slice(5)}</span>
                 </div>
               </div>
@@ -273,7 +273,7 @@ const Projects = () => {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
-                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-1.5">Owner</p>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-1.5">Team Lead</p>
                     <div className="flex items-center gap-2 text-xs">
                       <Avatar className="h-6 w-6"><AvatarFallback className="text-[9px] bg-primary/10 text-primary">{initials(selectedProject.owner)}</AvatarFallback></Avatar>
                       <span>{selectedProject.owner}</span>
@@ -282,7 +282,7 @@ const Projects = () => {
                   <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-1.5">Access</p>
                     <p className="text-xs text-muted-foreground">
-                      {isProjectOwner ? "You can manage status, timeline, and subtasks." : canManageWork ? "You can manage timeline and subtasks." : "View-only access."}
+                      {isProjectOwner ? "You can manage status, timeline, and subtasks." : canManageWork ? "You can manage timeline and subtasks as a member." : "View-only access."}
                     </p>
                   </div>
                 </div>
@@ -298,7 +298,7 @@ const Projects = () => {
                 <div className="rounded-lg border border-border/60 bg-muted/20 p-3 space-y-3">
                   <div className="flex items-center justify-between">
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Timeline</p>
-                    {!canManageWork && <span className="text-[10px] text-muted-foreground">Owner or co-owner can edit</span>}
+                    {!canManageWork && <span className="text-[10px] text-muted-foreground">Team lead or members can edit</span>}
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div className="space-y-1">
@@ -326,8 +326,8 @@ const Projects = () => {
 
                 <div className="rounded-lg border border-border/60 bg-muted/20 p-3 space-y-3">
                   <div className="flex items-center justify-between">
-                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Co-owners</p>
-                    {!isProjectOwner && <span className="text-[10px] text-muted-foreground">Only the owner can manage co-owners</span>}
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Members</p>
+                    {!isProjectOwner && <span className="text-[10px] text-muted-foreground">Only the team lead can manage members</span>}
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {(selectedProject.coOwners?.length ?? 0) > 0 ? (
@@ -347,14 +347,14 @@ const Projects = () => {
                         </Badge>
                       ))
                     ) : (
-                      <span className="text-xs text-muted-foreground">No co-owners assigned.</span>
+                      <span className="text-xs text-muted-foreground">No members assigned.</span>
                     )}
                   </div>
                   {isProjectOwner && (
                     <div className="flex gap-2">
                       <Select value={pendingCoOwner} onValueChange={setPendingCoOwner}>
                         <SelectTrigger className="text-xs">
-                          <SelectValue placeholder={coOwnerCandidates.length > 0 ? "Select a co-owner" : "No available users"} />
+                          <SelectValue placeholder={coOwnerCandidates.length > 0 ? "Select a member" : "No available users"} />
                         </SelectTrigger>
                         <SelectContent>
                           {coOwnerCandidates.map((user) => (
@@ -372,7 +372,7 @@ const Projects = () => {
                           setPendingCoOwner("");
                         }}
                       >
-                        <UserPlus className="h-4 w-4" /> Add
+                        <UserPlus className="h-4 w-4" /> Add member
                       </Button>
                     </div>
                   )}
@@ -381,7 +381,7 @@ const Projects = () => {
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Project status</p>
-                    {!isProjectOwner && <span className="text-[10px] text-muted-foreground">Only the owner can change status</span>}
+                    {!isProjectOwner && <span className="text-[10px] text-muted-foreground">Only the team lead can change status</span>}
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     {PROJECT_STATUSES.map((status) => (
@@ -482,7 +482,7 @@ const Projects = () => {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Subtasks</p>
-                    {!canManageWork && <span className="text-[10px] text-muted-foreground">Owner or co-owner can update subtasks</span>}
+                    {!canManageWork && <span className="text-[10px] text-muted-foreground">Team lead or members can update subtasks</span>}
                   </div>
 
                   {canManageWork && (
@@ -515,6 +515,7 @@ const Projects = () => {
                     {(selectedProject.subtasks?.length ?? 0) > 0 ? (
                       selectedProject.subtasks!.map((subtask) => (
                         <div key={subtask.id} className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+                          <span className="text-muted-foreground">•</span>
                           <button
                             type="button"
                             disabled={!canManageWork}

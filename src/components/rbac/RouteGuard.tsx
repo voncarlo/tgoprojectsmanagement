@@ -2,6 +2,7 @@ import { useLocation } from "react-router-dom";
 import { useAuth } from "@/auth/AuthContext";
 import { AccessDenied } from "./AccessDenied";
 import type { ModuleKey } from "@/data/mock";
+import type { Capability } from "@/auth/permissions";
 
 const ROUTE_TO_MODULE: Record<string, { module: ModuleKey; label: string }> = {
   "/dashboard":     { module: "dashboard",     label: "Dashboard" },
@@ -30,11 +31,19 @@ const ROUTE_TO_MODULE: Record<string, { module: ModuleKey; label: string }> = {
   "/settings":      { module: "settings",      label: "Settings" },
 };
 
+const ROUTE_TO_CAPABILITY: Partial<Record<string, { cap: Capability; label: string }>> = {
+  "/activity": { cap: "audit.view", label: "Activity Logs" },
+};
+
 interface Props { children: React.ReactNode }
 
 export const RouteGuard = ({ children }: Props) => {
   const { pathname } = useLocation();
-  const { canAccess } = useAuth();
+  const { canAccess, can } = useAuth();
+  const capabilityMatch = ROUTE_TO_CAPABILITY[pathname];
+  if (capabilityMatch && !can(capabilityMatch.cap)) {
+    return <AccessDenied module={capabilityMatch.label} />;
+  }
   const match = ROUTE_TO_MODULE[pathname];
   if (match && !canAccess(match.module)) {
     return <AccessDenied module={match.label} />;

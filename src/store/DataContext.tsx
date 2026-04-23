@@ -136,6 +136,9 @@ interface DataCtx {
   ) => void;
   addTaskApprovalComment: (taskId: string, comment: string) => void;
   decideApproval: (approvalId: string, status: ApprovalStatus, comment?: string) => void;
+  hideApproval: (approvalId: string) => void;
+  removeApproval: (approvalId: string) => void;
+  clearApprovals: () => void;
   addDocument: (doc: Omit<DocumentFile, "id" | "updated" | "version"> & { version?: string }) => DocumentFile;
   removeDocument: (id: string) => void;
   restoreRecycleItem: (id: string) => void;
@@ -144,6 +147,7 @@ interface DataCtx {
   addCalendarEvent: (event: Omit<CalendarEvent, "id">) => CalendarEvent;
   removeCalendarEvent: (id: string) => void;
   requestCalendarPto: (event: Omit<CalendarEvent, "id">) => void;
+  clearAuditLog: () => void;
   sendChatMessage: (
     recipientId: string,
     body: string,
@@ -1141,6 +1145,57 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     [addCalendarEvent, appendAudit, currentUser.name, decideProjectApproval, decideTaskApproval, pushActivity]
   );
 
+  const hideApproval: DataCtx["hideApproval"] = useCallback(
+    (approvalId) => {
+      let hiddenApproval: Approval | null = null;
+      setApprovals((items) =>
+        items.map((approval) => {
+          if (approval.id !== approvalId) return approval;
+          hiddenApproval = { ...approval, hidden: true };
+          return hiddenApproval;
+        })
+      );
+      if (!hiddenApproval) return;
+      appendAudit({
+        user: currentUser.name,
+        action: "Hid approval",
+        target: hiddenApproval.title,
+        category: "Approval",
+        team: hiddenApproval.team,
+      });
+    },
+    [appendAudit, currentUser.name]
+  );
+
+  const removeApproval: DataCtx["removeApproval"] = useCallback(
+    (approvalId) => {
+      let removedApproval: Approval | null = null;
+      setApprovals((items) =>
+        items.filter((approval) => {
+          if (approval.id === approvalId) removedApproval = approval;
+          return approval.id !== approvalId;
+        })
+      );
+      if (!removedApproval) return;
+      appendAudit({
+        user: currentUser.name,
+        action: "Deleted approval",
+        target: removedApproval.title,
+        category: "Approval",
+        team: removedApproval.team,
+      });
+    },
+    [appendAudit, currentUser.name]
+  );
+
+  const clearApprovals: DataCtx["clearApprovals"] = useCallback(() => {
+    setApprovals([]);
+  }, []);
+
+  const clearAuditLog: DataCtx["clearAuditLog"] = useCallback(() => {
+    setAuditLog([]);
+  }, []);
+
   const sendChatMessage: DataCtx["sendChatMessage"] = useCallback(
     (recipientId, body, attachment) => {
       const text = body.trim();
@@ -1257,6 +1312,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       decideProjectApproval,
       addTaskApprovalComment,
       decideApproval,
+      hideApproval,
+      removeApproval,
+      clearApprovals,
       addDocument,
       removeDocument,
       restoreRecycleItem,
@@ -1265,6 +1323,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       addCalendarEvent,
       removeCalendarEvent,
       requestCalendarPto,
+      clearAuditLog,
       sendChatMessage,
       updateChatMessage,
       removeChatMessage,
@@ -1299,6 +1358,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       decideProjectApproval,
       addTaskApprovalComment,
       decideApproval,
+      hideApproval,
+      removeApproval,
+      clearApprovals,
       addDocument,
       removeDocument,
       restoreRecycleItem,
@@ -1307,6 +1369,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       addCalendarEvent,
       removeCalendarEvent,
       requestCalendarPto,
+      clearAuditLog,
       sendChatMessage,
       updateChatMessage,
       removeChatMessage,

@@ -5,9 +5,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ShieldCheck } from "lucide-react";
-import { teams, type Priority, type ProjectStatus, type TaskStatus, type TeamId } from "@/data/mock";
+import { Plus, ShieldCheck, X } from "lucide-react";
+import { teams, type Priority, type ProjectStatus, type Subtask, type TaskStatus, type TeamId } from "@/data/mock";
 import { useAuth } from "@/auth/AuthContext";
 import { useData } from "@/store/DataContext";
 import { toast } from "sonner";
@@ -49,9 +50,12 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
 
   const [pName, setPName] = useState("");
   const [pDesc, setPDesc] = useState("");
-  const [pSubtasks, setPSubtasks] = useState("");
+  const [pSubtasks, setPSubtasks] = useState<Subtask[]>([]);
+  const [pSubtaskDraft, setPSubtaskDraft] = useState("");
   const [pTeam, setPTeam] = useState<TeamId>(initialTeam);
   const [pOwner, setPOwner] = useState(currentUser.name);
+  const [pMembers, setPMembers] = useState<string[]>([]);
+  const [pMemberDraft, setPMemberDraft] = useState("");
   const [pStatus, setPStatus] = useState<ProjectStatus>("Planning");
   const [pStart, setPStart] = useState(new Date().toISOString().slice(0, 10));
   const [pEnd, setPEnd] = useState(new Date(Date.now() + 60 * 86400000).toISOString().slice(0, 10));
@@ -65,13 +69,21 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, defaultTab, defaultTeam, defaultStatus]);
 
+  useEffect(() => {
+    setPMembers((current) => current.filter((member) => member !== pOwner));
+    if (pMemberDraft === pOwner) setPMemberDraft("");
+  }, [pMemberDraft, pOwner]);
+
   const reset = () => {
     setTTitle("");
     setTNotes("");
     setTSubtasks("");
     setPName("");
     setPDesc("");
-    setPSubtasks("");
+    setPSubtaskDraft("");
+    setPSubtasks([]);
+    setPMembers([]);
+    setPMemberDraft("");
   };
 
   const submitTask = () => {
@@ -100,16 +112,30 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
       description: pDesc || "-",
       team: pTeam,
       owner: pOwner,
-      coOwners: [],
+      coOwners: pMembers,
       status: pStatus,
       progress: 0,
       start: pStart,
       end: pEnd,
-      subtasks: parseSubtasks(pSubtasks),
+      subtasks: pSubtasks,
     });
     toast.success("Project created");
     reset();
     onOpenChange(false);
+  };
+
+  const availableMembers = userList.filter((user) => user.name !== pOwner && !pMembers.includes(user.name));
+
+  const addProjectSubtask = () => {
+    if (!pSubtaskDraft.trim()) return;
+    setPSubtasks((current) => [...current, { id: `sub-${Date.now()}`, title: pSubtaskDraft.trim(), done: false }]);
+    setPSubtaskDraft("");
+  };
+
+  const addProjectMember = () => {
+    if (!pMemberDraft) return;
+    setPMembers((current) => [...current, pMemberDraft]);
+    setPMemberDraft("");
   };
 
   return (
@@ -212,7 +238,39 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
             </div>
             <div className="space-y-2">
               <Label>Subtasks</Label>
-              <Textarea rows={4} value={pSubtasks} onChange={(event) => setPSubtasks(event.target.value)} placeholder={"One subtask per line\nExample:\nDefine scope\nAssign owners\nReview launch checklist"} />
+              <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
+                <div className="flex gap-2">
+                  <Input
+                    value={pSubtaskDraft}
+                    onChange={(event) => setPSubtaskDraft(event.target.value)}
+                    placeholder="Add a subtask bullet"
+                    className="text-sm"
+                  />
+                  <Button type="button" variant="outline" className="gap-1.5" onClick={addProjectSubtask} disabled={!pSubtaskDraft.trim()}>
+                    <Plus className="h-4 w-4" /> Add
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  {pSubtasks.length > 0 ? (
+                    pSubtasks.map((subtask) => (
+                      <div key={subtask.id} className="flex items-center gap-2 rounded-md border border-border/60 bg-background px-3 py-2 text-sm">
+                        <span className="text-muted-foreground">•</span>
+                        <span className="flex-1">{subtask.title}</span>
+                        <button
+                          type="button"
+                          onClick={() => setPSubtasks((current) => current.filter((item) => item.id !== subtask.id))}
+                          className="text-muted-foreground hover:text-foreground"
+                          aria-label={`Remove ${subtask.title}`}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-muted-foreground">No subtasks yet. Add them one bullet at a time.</p>
+                  )}
+                </div>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
@@ -225,13 +283,50 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Owner</Label>
+                <Label>Team Lead</Label>
                 <Select value={pOwner} onValueChange={setPOwner}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {userList.map((user) => <SelectItem key={user.id} value={user.name}>{user.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="space-y-2 col-span-2">
+                <Label>Members</Label>
+                <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
+                  <div className="flex gap-2">
+                    <Select value={pMemberDraft} onValueChange={setPMemberDraft}>
+                      <SelectTrigger className="text-sm">
+                        <SelectValue placeholder={availableMembers.length > 0 ? "Select a member" : "No available members"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableMembers.map((user) => <SelectItem key={user.id} value={user.name}>{user.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Button type="button" variant="outline" className="gap-1.5" onClick={addProjectMember} disabled={!pMemberDraft}>
+                      <Plus className="h-4 w-4" /> Add
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {pMembers.length > 0 ? (
+                      pMembers.map((member) => (
+                        <Badge key={member} variant="outline" className="gap-1.5 px-2 py-1">
+                          {member}
+                          <button
+                            type="button"
+                            onClick={() => setPMembers((current) => current.filter((item) => item !== member))}
+                            className="text-muted-foreground hover:text-foreground"
+                            aria-label={`Remove ${member}`}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      ))
+                    ) : (
+                      <p className="text-xs text-muted-foreground">No members selected yet.</p>
+                    )}
+                  </div>
+                </div>
               </div>
               <div className="space-y-2">
                 <Label>Status</Label>

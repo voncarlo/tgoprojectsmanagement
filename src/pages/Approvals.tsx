@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
-import { GitBranch, Check, X, RotateCcw, CalendarDays } from "lucide-react";
+import { CalendarDays, Check, EyeOff, GitBranch, RotateCcw, Trash2, X } from "lucide-react";
 import { teams, type Approval, type ApprovalStatus } from "@/data/mock";
 import { PageHeader } from "@/components/portal/PageHeader";
 import { TeamIcon } from "@/components/portal/TeamIcon";
@@ -33,31 +33,81 @@ const TYPE_TONE = {
   Report: "bg-muted text-muted-foreground",
 };
 
+const FILTERS = ["All", "Pending", "Under Review", "Approved", "Rejected", "Returned"] as const;
+
 const Approvals = () => {
   const { visibleTeams } = useAuth();
-  const { approvals, decideApproval } = useData();
+  const { approvals, decideApproval, hideApproval, removeApproval, clearApprovals } = useData();
   const [filter, setFilter] = useState<ApprovalStatus | "All">("All");
   const [open, setOpen] = useState<Approval | null>(null);
   const [comment, setComment] = useState("");
 
-  const visible = useMemo(() => approvals.filter((a) => visibleTeams.includes(a.team) && (filter === "All" || a.status === filter)), [approvals, visibleTeams, filter]);
+  const scopedApprovals = useMemo(
+    () => approvals.filter((approval) => !approval.hidden && visibleTeams.includes(approval.team)),
+    [approvals, visibleTeams]
+  );
+
+  const visible = useMemo(
+    () => scopedApprovals.filter((approval) => filter === "All" || approval.status === filter),
+    [scopedApprovals, filter]
+  );
+
   const counts = {
-    pending: approvals.filter((a) => visibleTeams.includes(a.team) && a.status === "Pending").length,
-    review: approvals.filter((a) => visibleTeams.includes(a.team) && a.status === "Under Review").length,
-    approved: approvals.filter((a) => visibleTeams.includes(a.team) && a.status === "Approved").length,
-    rejected: approvals.filter((a) => visibleTeams.includes(a.team) && a.status === "Rejected").length,
+    pending: scopedApprovals.filter((approval) => approval.status === "Pending").length,
+    review: scopedApprovals.filter((approval) => approval.status === "Under Review").length,
+    approved: scopedApprovals.filter((approval) => approval.status === "Approved").length,
+    rejected: scopedApprovals.filter((approval) => approval.status === "Rejected").length,
+  };
+
+  const closeSheet = () => {
+    setOpen(null);
+    setComment("");
   };
 
   const decide = (id: string, status: ApprovalStatus) => {
     decideApproval(id, status, comment.trim() || undefined);
     toast.success(`Marked ${status.toLowerCase()}`);
-    setOpen(null);
-    setComment("");
+    closeSheet();
+  };
+
+  const hideCurrentApproval = () => {
+    if (!open) return;
+    hideApproval(open.id);
+    toast.success("Approval hidden");
+    closeSheet();
+  };
+
+  const deleteCurrentApproval = () => {
+    if (!open) return;
+    removeApproval(open.id);
+    toast.success("Approval deleted");
+    closeSheet();
+  };
+
+  const clearAllApprovals = () => {
+    const confirmed = window.confirm("Clear all approvals from the approval queue?");
+    if (!confirmed) return;
+    clearApprovals();
+    toast.success("Approvals cleared");
+    closeSheet();
   };
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Approvals" description="Multi-step approvals across tasks, leave, budgets, changes and reports." />
+      <PageHeader
+        title="Approvals"
+        description="Multi-step approvals across tasks, leave, budgets, changes and reports."
+        actions={
+          <Can
+            cap="approval.decide"
+            fallback={null}
+          >
+            <Button variant="outline" className="gap-1.5 text-destructive hover:text-destructive" onClick={clearAllApprovals}>
+              <Trash2 className="h-4 w-4" /> Clear approvals
+            </Button>
+          </Can>
+        }
+      />
 
       <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
         <StatTile label="Pending" value={counts.pending} icon={GitBranch} tone="text-warning" />
@@ -67,33 +117,41 @@ const Approvals = () => {
       </div>
 
       <div className="flex flex-wrap items-center gap-1">
-        {(["All","Pending","Under Review","Approved","Rejected","Returned"] as const).map((s) => (
-          <button key={s} onClick={() => setFilter(s as any)} className={cn("h-7 px-3 rounded-full border text-xs font-medium transition-smooth",
-            filter === s ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-muted")}>{s}</button>
+        {FILTERS.map((status) => (
+          <button
+            key={status}
+            onClick={() => setFilter(status as ApprovalStatus | "All")}
+            className={cn(
+              "h-7 px-3 rounded-full border text-xs font-medium transition-smooth",
+              filter === status ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-muted"
+            )}
+          >
+            {status}
+          </button>
         ))}
       </div>
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {visible.map((a) => {
-          const team = teams.find((t) => t.id === a.team)!;
+        {visible.map((approval) => {
+          const team = teams.find((entry) => entry.id === approval.team)!;
           return (
-            <Card key={a.id} onClick={() => setOpen(a)} className="p-4 cursor-pointer card-interactive">
+            <Card key={approval.id} onClick={() => setOpen(approval)} className="p-4 cursor-pointer card-interactive">
               <div className="flex items-start justify-between mb-2">
-                <Badge variant="outline" className={cn("text-[10px]", TYPE_TONE[a.type])}>{a.type}</Badge>
-                <Badge variant="outline" className={cn("text-[10px]", STATUS_TONE[a.status])}>{a.status}</Badge>
+                <Badge variant="outline" className={cn("text-[10px]", TYPE_TONE[approval.type])}>{approval.type}</Badge>
+                <Badge variant="outline" className={cn("text-[10px]", STATUS_TONE[approval.status])}>{approval.status}</Badge>
               </div>
-              <p className="text-sm font-medium leading-snug mb-3">{a.title}</p>
+              <p className="text-sm font-medium leading-snug mb-3">{approval.title}</p>
               <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                 <span className="flex items-center gap-1.5"><TeamIcon team={team.id} size={11} /> {team.name}</span>
-                <span className="flex items-center gap-1"><CalendarDays className="h-3 w-3" /> {a.submitted}</span>
+                <span className="flex items-center gap-1"><CalendarDays className="h-3 w-3" /> {approval.submitted}</span>
               </div>
-              {a.amount && <p className="text-xs font-semibold text-foreground mt-2">${a.amount.toLocaleString()}</p>}
+              {approval.amount && <p className="text-xs font-semibold text-foreground mt-2">${approval.amount.toLocaleString()}</p>}
             </Card>
           );
         })}
       </div>
 
-      <Sheet open={!!open} onOpenChange={(o) => !o && setOpen(null)}>
+      <Sheet open={!!open} onOpenChange={(value) => !value && closeSheet()}>
         <SheetContent className="w-full sm:max-w-md overflow-y-auto">
           {open && (
             <>
@@ -120,7 +178,7 @@ const Approvals = () => {
 
                 <div>
                   <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium mb-1">Add a comment</p>
-                  <Textarea rows={3} value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Optional feedback…" />
+                  <Textarea rows={3} value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Optional feedback..." />
                 </div>
 
                 <Can
@@ -132,10 +190,18 @@ const Approvals = () => {
                     </div>
                   }
                 >
-                  <div className="flex gap-2 pt-2">
+                  <div className="flex flex-wrap gap-2 pt-2">
                     <Button className="flex-1 gradient-primary text-primary-foreground gap-1.5" onClick={() => decide(open.id, "Approved")}><Check className="h-4 w-4" /> Approve</Button>
                     <Button variant="outline" className="gap-1.5" onClick={() => decide(open.id, "Returned")}><RotateCcw className="h-4 w-4" /> Return</Button>
                     <Button variant="outline" className="gap-1.5 text-destructive hover:text-destructive" onClick={() => decide(open.id, "Rejected")}><X className="h-4 w-4" /> Reject</Button>
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <Button variant="outline" className="flex-1 gap-1.5" onClick={hideCurrentApproval}>
+                      <EyeOff className="h-4 w-4" /> Hide
+                    </Button>
+                    <Button variant="outline" className="flex-1 gap-1.5 text-destructive hover:text-destructive" onClick={deleteCurrentApproval}>
+                      <Trash2 className="h-4 w-4" /> Delete
+                    </Button>
                   </div>
                 </Can>
               </div>
