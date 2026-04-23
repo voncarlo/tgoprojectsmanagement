@@ -4,6 +4,7 @@ import {
   projects as seedProjects,
   activity as seedActivity,
   approvals as seedApprovals,
+  teams,
   documents as seedDocuments,
   automations as seedAutomations,
   auditLog as seedAuditLog,
@@ -16,6 +17,7 @@ import {
   type ApprovalHistoryEntry,
   type Approval,
   type ApprovalStatus,
+  type TeamId,
   type DocumentFile,
   type AutomationRule,
   type AuditEntry,
@@ -126,6 +128,11 @@ interface DataCtx {
     decision: "Approved" | "Rejected" | "Returned for Revision",
     comment?: string
   ) => void;
+  decideProjectApproval: (
+    projectId: string,
+    decision: "Approved" | "Rejected" | "Returned for Revision",
+    comment?: string
+  ) => void;
   addTaskApprovalComment: (taskId: string, comment: string) => void;
   decideApproval: (approvalId: string, status: ApprovalStatus, comment?: string) => void;
   addDocument: (doc: Omit<DocumentFile, "id" | "updated" | "version"> & { version?: string }) => DocumentFile;
@@ -217,6 +224,9 @@ const recomputeProgress = (project: Project): Project => {
   const done = project.milestones.filter((milestone) => milestone.done).length;
   return { ...project, progress: Math.round((done / total) * 100) };
 };
+
+const getTeamApproverName = (teamId: TeamId, fallback: string) =>
+  teams.find((team) => team.id === teamId)?.lead ?? fallback;
 
 export const DataProvider = ({ children }: { children: ReactNode }) => {
   const auth = useAuth();
@@ -392,6 +402,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       const next: Task = {
         ...taskInput,
         id: id("t"),
+        requiresApproval: true,
+        approver: getTeamApproverName(taskInput.team, taskInput.approver ?? currentUser.name),
+        approvalHistory: taskInput.approvalHistory ?? [],
       };
       setTasks((items) => [next, ...items]);
       pushActivity({ user: currentUser.name, action: "created task", target: next.title });
@@ -416,11 +429,15 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         items.map((task) => {
           if (task.id !== taskId) return task;
 
-          let next: Task = { ...task, ...patch };
+          let next: Task = {
+            ...task,
+            ...patch,
+            requiresApproval: true,
+            approver: getTeamApproverName((patch.team ?? task.team) as TeamId, patch.approver ?? task.approver ?? currentUser.name),
+          };
           if (
             patch.status === "Completed" &&
             task.status !== "Completed" &&
-            next.requiresApproval &&
             next.approver &&
             next.approvalStatus !== "Approved"
           ) {
@@ -534,6 +551,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           { name: "Build", done: false },
           { name: "Launch", done: false },
         ],
+        requiresApproval: true,
+        approver: getTeamApproverName(projectInput.team, projectInput.owner),
+        approvalHistory: [],
       };
       const withProgress = recomputeProgress(next);
       setProjects((items) => [withProgress, ...items]);
@@ -553,14 +573,74 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const updateProject: DataCtx["updateProject"] = useCallback(
     (projectId, patch) => {
       let updatedProject: Project | null = null;
+      let submittedForApproval = false;
       setProjects((items) =>
         items.map((project) => {
           if (project.id !== projectId) return project;
-          updatedProject = recomputeProgress({ ...project, ...patch });
+          let nextProject = recomputeProgress({
+            ...project,
+            ...patch,
+            requiresApproval: true,
+            approver: getTeamApproverName((patch.team ?? project.team) as TeamId, patch.approver ?? project.approver ?? project.owner),
+          });
+          if (
+            patch.status === "Completed" &&
+            project.status !== "Completed" &&
+            nextProject.approver &&
+            nextProject.approvalStatus !== "Approved"
+          ) {
+            const entry: ApprovalHistoryEntry = {
+              id: id("h"),
+              actor: currentUser.name,
+              action: "Submitted",
+              comment: "Submitted for approval",
+              at: nowLabel(),
+            };
+            nextProject = {
+              ...nextProject,
+              status: "Waiting Review",
+              approvalStatus: "Pending Approval",
+              approvalHistory: [...(project.approvalHistory ?? []), entry],
+            };
+            submittedForApproval = true;
+          }
+          updatedProject = nextProject;
           return updatedProject;
         })
       );
       if (!updatedProject) return;
+      if (submittedForApproval) {
+        pushActivity({
+          user: currentUser.name,
+          action: "submitted project for approval",
+          target: `${updatedProject.name} -> ${updatedProject.approver}`,
+        });
+        appendAudit({
+          user: currentUser.name,
+          action: "Submitted project for approval",
+          target: updatedProject.name,
+          category: "Approval",
+          team: updatedProject.team,
+        });
+        setApprovals((items) => {
+          const existing = items.find((item) => item.projectId === updatedProject?.id);
+          const nextApproval: Approval = {
+            id: existing?.id ?? id("ap"),
+            type: "Project",
+            title: updatedProject.name,
+            requester: updatedProject.owner,
+            team: updatedProject.team,
+            status: "Pending",
+            submitted: todayIso(),
+            notes: updatedProject.description,
+            projectId: updatedProject.id,
+          };
+          return existing
+            ? items.map((item) => (item.id === existing.id ? nextApproval : item))
+            : [nextApproval, ...items];
+        });
+        return;
+      }
       appendAudit({
         user: currentUser.name,
         action: "Updated project",
@@ -568,8 +648,15 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         category: "Project",
         team: updatedProject.team,
       });
+      if (patch.status) {
+        pushActivity({
+          user: currentUser.name,
+          action: patch.status === "Completed" ? "completed project" : `updated project to ${patch.status}`,
+          target: updatedProject.name,
+        });
+      }
     },
-    [appendAudit, currentUser.name]
+    [appendAudit, currentUser.name, pushActivity]
   );
 
   const removeProject: DataCtx["removeProject"] = useCallback(
@@ -704,6 +791,70 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     [appendAudit, currentUser.name, pushActivity]
   );
 
+  const decideProjectApproval: DataCtx["decideProjectApproval"] = useCallback(
+    (projectId, decision, comment) => {
+      let decidedProject: Project | null = null;
+      setProjects((items) =>
+        items.map((project) => {
+          if (project.id !== projectId) return project;
+          const entry: ApprovalHistoryEntry = {
+            id: id("h"),
+            actor: currentUser.name,
+            action: decision,
+            comment,
+            at: nowLabel(),
+          };
+          const nextStatus: Project["status"] =
+            decision === "Approved"
+              ? "Completed"
+              : decision === "Rejected"
+                ? "On Hold"
+                : "Active";
+          decidedProject = {
+            ...project,
+            status: nextStatus,
+            approvalStatus: decision as TaskApprovalStatus,
+            approvalHistory: [...(project.approvalHistory ?? []), entry],
+          };
+          return decidedProject;
+        })
+      );
+
+      if (!decidedProject) return;
+
+      const approvalStatusMap: Record<"Approved" | "Rejected" | "Returned for Revision", ApprovalStatus> = {
+        Approved: "Approved",
+        Rejected: "Rejected",
+        "Returned for Revision": "Returned",
+      };
+      setApprovals((items) =>
+        items.map((approval) =>
+          approval.projectId === projectId
+            ? { ...approval, status: approvalStatusMap[decision], notes: comment || approval.notes }
+            : approval
+        )
+      );
+      pushActivity({
+        user: currentUser.name,
+        action:
+          decision === "Approved"
+            ? "approved project"
+            : decision === "Rejected"
+              ? "rejected project completion"
+              : "returned project for revision",
+        target: decidedProject.name,
+      });
+      appendAudit({
+        user: currentUser.name,
+        action: decision,
+        target: decidedProject.name,
+        category: "Approval",
+        team: decidedProject.team,
+      });
+    },
+    [appendAudit, currentUser.name, pushActivity]
+  );
+
   const addTaskApprovalComment: DataCtx["addTaskApprovalComment"] = useCallback(
     (taskId, comment) => {
       if (!comment.trim()) return;
@@ -756,6 +907,17 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
                 : null;
         if (taskDecision) decideTaskApproval(updatedApproval.taskId, taskDecision, comment);
       }
+      if (updatedApproval.projectId) {
+        const projectDecision =
+          status === "Approved"
+            ? "Approved"
+            : status === "Rejected"
+              ? "Rejected"
+              : status === "Returned"
+                ? "Returned for Revision"
+                : null;
+        if (projectDecision) decideProjectApproval(updatedApproval.projectId, projectDecision, comment);
+      }
       appendAudit({
         user: currentUser.name,
         action: `Set approval to ${status}`,
@@ -764,7 +926,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         team: updatedApproval.team,
       });
     },
-    [appendAudit, currentUser.name, decideTaskApproval]
+    [appendAudit, currentUser.name, decideProjectApproval, decideTaskApproval]
   );
 
   const addDocument: DataCtx["addDocument"] = useCallback(
@@ -1018,6 +1180,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       pushNotification,
       markAllRead,
       decideTaskApproval,
+      decideProjectApproval,
       addTaskApprovalComment,
       decideApproval,
       addDocument,
@@ -1056,6 +1219,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       pushNotification,
       markAllRead,
       decideTaskApproval,
+      decideProjectApproval,
       addTaskApprovalComment,
       decideApproval,
       addDocument,

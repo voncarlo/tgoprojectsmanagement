@@ -1,14 +1,13 @@
-import { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { useEffect, useState } from "react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { ShieldCheck } from "lucide-react";
-import { teams, type Priority, type TaskStatus, type ProjectStatus, type TeamId } from "@/data/mock";
+import { teams, type Priority, type ProjectStatus, type TaskStatus, type TeamId } from "@/data/mock";
 import { useAuth } from "@/auth/AuthContext";
 import { useData } from "@/store/DataContext";
 import { toast } from "sonner";
@@ -28,11 +27,10 @@ interface Props {
 export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaultTeam, defaultStatus }: Props) => {
   const { currentUser, visibleTeams, userList } = useAuth();
   const { addTask, addProject } = useData();
-  const teamsAvailable = teams.filter((t) => visibleTeams.includes(t.id));
+  const teamsAvailable = teams.filter((team) => visibleTeams.includes(team.id));
   const initialTeam = defaultTeam ?? (teamsAvailable[0]?.id ?? currentUser.team);
-  const approverCandidates = userList.filter((u) =>
-    ["Super Admin", "Admin", "Manager"].includes(u.role)
-  );
+  const managerLabelFor = (teamId: TeamId) =>
+    teams.find((team) => team.id === teamId)?.lead ?? userList[0]?.name ?? currentUser.name;
 
   const [tab, setTab] = useState<"task" | "project">(defaultTab);
   const [tTitle, setTTitle] = useState("");
@@ -42,8 +40,6 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
   const [tStatus, setTStatus] = useState<TaskStatus>(defaultStatus ?? "Not Started");
   const [tDue, setTDue] = useState(new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10));
   const [tNotes, setTNotes] = useState("");
-  const [tRequiresApproval, setTRequiresApproval] = useState(false);
-  const [tApprover, setTApprover] = useState<string>(approverCandidates[0]?.name ?? "");
 
   const [pName, setPName] = useState("");
   const [pDesc, setPDesc] = useState("");
@@ -63,13 +59,14 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
   }, [open, defaultTab, defaultTeam, defaultStatus]);
 
   const reset = () => {
-    setTTitle(""); setTNotes("");
-    setPName(""); setPDesc("");
+    setTTitle("");
+    setTNotes("");
+    setPName("");
+    setPDesc("");
   };
 
   const submitTask = () => {
     if (!tTitle.trim()) return toast.error("Task title is required");
-    if (tRequiresApproval && !tApprover) return toast.error("Please select an approver");
     addTask({
       title: tTitle.trim(),
       assignee: tAssignee,
@@ -78,8 +75,8 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
       status: tStatus,
       due: tDue,
       notes: tNotes || undefined,
-      requiresApproval: tRequiresApproval,
-      approver: tRequiresApproval ? tApprover : undefined,
+      requiresApproval: true,
+      approver: managerLabelFor(tTeam),
       approvalStatus: undefined,
       approvalHistory: [],
     });
@@ -92,7 +89,7 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
     if (!pName.trim()) return toast.error("Project name is required");
     addProject({
       name: pName.trim(),
-      description: pDesc || "—",
+      description: pDesc || "-",
       team: pTeam,
       owner: pOwner,
       status: pStatus,
@@ -112,7 +109,7 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
           <DialogTitle>Quick add</DialogTitle>
           <DialogDescription>Create a task or project in seconds.</DialogDescription>
         </DialogHeader>
-        <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
+        <Tabs value={tab} onValueChange={(value) => setTab(value as "task" | "project")}>
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="task">Task</TabsTrigger>
             <TabsTrigger value="project">Project</TabsTrigger>
@@ -121,7 +118,7 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
           <TabsContent value="task" className="space-y-4 pt-3">
             <div className="space-y-2">
               <Label>Title</Label>
-              <Input autoFocus value={tTitle} onChange={(e) => setTTitle(e.target.value)} placeholder="What needs to be done?" />
+              <Input autoFocus value={tTitle} onChange={(event) => setTTitle(event.target.value)} placeholder="What needs to be done?" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
@@ -129,76 +126,58 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
                 <Select value={tAssignee} onValueChange={setTAssignee}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {userList.map((u) => <SelectItem key={u.id} value={u.name}>{u.name}</SelectItem>)}
+                    {userList.map((user) => <SelectItem key={user.id} value={user.name}>{user.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label>Department</Label>
-                <Select value={tTeam} onValueChange={(v) => setTTeam(v as TeamId)}>
+                <Select value={tTeam} onValueChange={(value) => setTTeam(value as TeamId)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {teamsAvailable.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                    {teamsAvailable.map((team) => <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label>Priority</Label>
-                <Select value={tPriority} onValueChange={(v) => setTPriority(v as Priority)}>
+                <Select value={tPriority} onValueChange={(value) => setTPriority(value as Priority)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {PRIORITIES.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                    {PRIORITIES.map((priority) => <SelectItem key={priority} value={priority}>{priority}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label>Status</Label>
-                <Select value={tStatus} onValueChange={(v) => setTStatus(v as TaskStatus)}>
+                <Select value={tStatus} onValueChange={(value) => setTStatus(value as TaskStatus)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                    {STATUSES.map((status) => <SelectItem key={status} value={status}>{status}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2 col-span-2">
                 <Label>Due date</Label>
-                <Input type="date" value={tDue} onChange={(e) => setTDue(e.target.value)} />
+                <Input type="date" value={tDue} onChange={(event) => setTDue(event.target.value)} />
               </div>
             </div>
             <div className="space-y-2">
               <Label>Notes</Label>
-              <Textarea rows={3} value={tNotes} onChange={(e) => setTNotes(e.target.value)} placeholder="Optional context…" />
+              <Textarea rows={3} value={tNotes} onChange={(event) => setTNotes(event.target.value)} placeholder="Optional context..." />
             </div>
-            <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-start gap-2.5">
-                  <div className="h-8 w-8 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                    <ShieldCheck className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">Requires approval</p>
-                    <p className="text-xs text-muted-foreground">
-                      Marking complete will route this task to an approver before it closes.
-                    </p>
-                  </div>
+            <div className="rounded-lg border border-border bg-muted/30 p-3">
+              <div className="flex items-start gap-2.5">
+                <div className="h-8 w-8 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                  <ShieldCheck className="h-4 w-4" />
                 </div>
-                <Switch checked={tRequiresApproval} onCheckedChange={setTRequiresApproval} />
+                <div>
+                  <p className="text-sm font-medium">Department manager approval</p>
+                  <p className="text-xs text-muted-foreground">
+                    All tasks are routed to the respective department manager before completion. This task will go to {managerLabelFor(tTeam)} when marked complete.
+                  </p>
+                </div>
               </div>
-              {tRequiresApproval && (
-                <div className="space-y-2">
-                  <Label>Approver</Label>
-                  <Select value={tApprover} onValueChange={setTApprover}>
-                    <SelectTrigger><SelectValue placeholder="Select approver…" /></SelectTrigger>
-                    <SelectContent>
-                      {approverCandidates.map((u) => (
-                        <SelectItem key={u.id} value={u.name}>
-                          {u.name} · <span className="text-muted-foreground">{u.role}</span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
@@ -209,19 +188,19 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
           <TabsContent value="project" className="space-y-4 pt-3">
             <div className="space-y-2">
               <Label>Name</Label>
-              <Input autoFocus value={pName} onChange={(e) => setPName(e.target.value)} placeholder="Project name" />
+              <Input autoFocus value={pName} onChange={(event) => setPName(event.target.value)} placeholder="Project name" />
             </div>
             <div className="space-y-2">
               <Label>Description</Label>
-              <Textarea rows={2} value={pDesc} onChange={(e) => setPDesc(e.target.value)} placeholder="Brief description" />
+              <Textarea rows={2} value={pDesc} onChange={(event) => setPDesc(event.target.value)} placeholder="Brief description" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Team</Label>
-                <Select value={pTeam} onValueChange={(v) => setPTeam(v as TeamId)}>
+                <Select value={pTeam} onValueChange={(value) => setPTeam(value as TeamId)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {teamsAvailable.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                    {teamsAvailable.map((team) => <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -230,26 +209,39 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
                 <Select value={pOwner} onValueChange={setPOwner}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {userList.map((u) => <SelectItem key={u.id} value={u.name}>{u.name}</SelectItem>)}
+                    {userList.map((user) => <SelectItem key={user.id} value={user.name}>{user.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label>Status</Label>
-                <Select value={pStatus} onValueChange={(v) => setPStatus(v as ProjectStatus)}>
+                <Select value={pStatus} onValueChange={(value) => setPStatus(value as ProjectStatus)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {PROJECT_STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                    {PROJECT_STATUSES.map((status) => <SelectItem key={status} value={status}>{status}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label>Start</Label>
-                <Input type="date" value={pStart} onChange={(e) => setPStart(e.target.value)} />
+                <Input type="date" value={pStart} onChange={(event) => setPStart(event.target.value)} />
               </div>
               <div className="space-y-2 col-span-2">
                 <Label>End</Label>
-                <Input type="date" value={pEnd} onChange={(e) => setPEnd(e.target.value)} />
+                <Input type="date" value={pEnd} onChange={(event) => setPEnd(event.target.value)} />
+              </div>
+            </div>
+            <div className="rounded-lg border border-border bg-muted/30 p-3">
+              <div className="flex items-start gap-2.5">
+                <div className="h-8 w-8 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                  <ShieldCheck className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Department manager approval</p>
+                  <p className="text-xs text-muted-foreground">
+                    All projects are routed to the respective department manager before completion. This project will go to {managerLabelFor(pTeam)} when marked complete.
+                  </p>
+                </div>
               </div>
             </div>
             <DialogFooter>

@@ -60,10 +60,11 @@ export type ProjectStatus =
   | "At Risk"
   | "Delayed"
   | "On Hold"
+  | "Waiting Review"
   | "Completed"
   | "Cancelled";
 export type ProjectHealth = "Healthy" | "At Risk" | "Delayed" | "Blocked";
-export type ApprovalType = "Task" | "Leave" | "Budget" | "Change" | "Report";
+export type ApprovalType = "Task" | "Project" | "Leave" | "Budget" | "Change" | "Report";
 export type ApprovalStatus = "Pending" | "Under Review" | "Approved" | "Rejected" | "Returned";
 
 export interface Team {
@@ -125,6 +126,10 @@ export interface Project {
   start: string;
   end: string;
   milestones: Milestone[];
+  requiresApproval?: boolean;
+  approver?: string;
+  approvalStatus?: TaskApprovalStatus;
+  approvalHistory?: ApprovalHistoryEntry[];
 }
 
 export interface Activity {
@@ -262,6 +267,7 @@ export const projectStatusColor: Record<ProjectStatus, string> = {
   "At Risk": "bg-destructive/10 text-destructive border border-destructive/20",
   Delayed: "bg-warning/10 text-warning border border-warning/20",
   "On Hold": "bg-muted text-muted-foreground border border-border",
+  "Waiting Review": "bg-primary/10 text-primary border border-primary/20",
   Completed: "bg-success/10 text-success border border-success/20",
   Cancelled: "bg-muted text-muted-foreground/60 border border-border",
 };
@@ -285,6 +291,7 @@ export interface Approval {
   team: TeamId;
   status: ApprovalStatus;
   taskId?: string;
+  projectId?: string;
   amount?: number;
   submitted: string;
   notes?: string;
