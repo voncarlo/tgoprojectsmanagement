@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Bell, Search, Plus, CheckCheck, Sun, Moon, Command as CommandIcon, Menu, MessageSquare, LogOut, Settings, Sparkles, UserCircle2, Trash2 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
