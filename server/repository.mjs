@@ -28,9 +28,12 @@ const mapUserRow = (row) => ({
   notificationSettings: parseJson(row.notification_settings_json, undefined),
 });
 
+const mapUserPreview = (row) => (row ? mapUserRow(row) : null);
+
 const mapTaskRow = (row) => ({
   id: row.id,
   title: row.title,
+  assignedBy: row.assigned_by ?? undefined,
   assignee: row.assignee,
   team: row.team,
   priority: row.priority,
@@ -42,6 +45,7 @@ const mapTaskRow = (row) => ({
   approver: row.approver ?? undefined,
   approvalStatus: row.approval_status ?? undefined,
   approvalHistory: parseJson(row.approval_history_json, []),
+  subtasks: parseJson(row.subtasks_json, []),
 });
 
 const mapProjectRow = (row) => ({
@@ -50,11 +54,17 @@ const mapProjectRow = (row) => ({
   description: row.description,
   team: row.team,
   owner: row.owner,
+  coOwners: parseJson(row.co_owners_json, []),
   status: row.status,
   progress: row.progress,
   start: row.start_date instanceof Date ? row.start_date.toISOString().slice(0, 10) : String(row.start_date),
   end: row.end_date instanceof Date ? row.end_date.toISOString().slice(0, 10) : String(row.end_date),
   milestones: parseJson(row.milestones_json, []),
+  requiresApproval: Boolean(row.requires_approval),
+  approver: row.approver ?? undefined,
+  approvalStatus: row.approval_status ?? undefined,
+  approvalHistory: parseJson(row.approval_history_json, []),
+  subtasks: parseJson(row.subtasks_json, []),
 });
 
 const upsertUser = async (user) => {
@@ -107,6 +117,74 @@ const saveAuthMeta = async (currentUserId) => {
      ON DUPLICATE KEY UPDATE state_json = VALUES(state_json)`,
     [AUTH_META_KEY, JSON.stringify({ currentUserId })]
   );
+};
+
+const replaceTasksSnapshot = async (tasks = []) => {
+  await query("DELETE FROM tasks");
+  for (const task of tasks) {
+    await query(
+      `INSERT INTO tasks (
+        id, title, assigned_by, assignee, team, priority, status, due, project, notes,
+        requires_approval, approver, approval_status, approval_history_json, subtasks_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        task.id,
+        task.title,
+        task.assignedBy ?? null,
+        task.assignee,
+        task.team,
+        task.priority,
+        task.status,
+        task.due,
+        task.project ?? null,
+        task.notes ?? null,
+        task.requiresApproval ?? false,
+        task.approver ?? null,
+        task.approvalStatus ?? null,
+        JSON.stringify(task.approvalHistory ?? []),
+        JSON.stringify(task.subtasks ?? []),
+      ]
+    );
+  }
+};
+
+const replaceProjectsSnapshot = async (projects = []) => {
+  await query("DELETE FROM projects");
+  for (const project of projects) {
+    await query(
+      `INSERT INTO projects (
+        id, name, description, team, owner, co_owners_json, status, progress, start_date, end_date,
+        milestones_json, requires_approval, approver, approval_status, approval_history_json, subtasks_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        project.id,
+        project.name,
+        project.description,
+        project.team,
+        project.owner,
+        JSON.stringify(project.coOwners ?? []),
+        project.status,
+        project.progress ?? 0,
+        project.start,
+        project.end,
+        JSON.stringify(project.milestones ?? []),
+        project.requiresApproval ?? false,
+        project.approver ?? null,
+        project.approvalStatus ?? null,
+        JSON.stringify(project.approvalHistory ?? []),
+        JSON.stringify(project.subtasks ?? []),
+      ]
+    );
+  }
+};
+
+export const findUserByEmail = async (email) => {
+  const rows = await query("SELECT * FROM users WHERE LOWER(email) = LOWER(?) LIMIT 1", [email]);
+  return mapUserPreview(rows[0] ?? null);
+};
+
+export const saveUserPassword = async (userId, passwordValue) => {
+  await setUserPassword(userId, passwordValue);
 };
 
 const deleteStateSnapshot = async (stateKey) => {
@@ -210,6 +288,11 @@ export const saveStateSnapshot = async (stateKey, payload) => {
      ON DUPLICATE KEY UPDATE state_json = VALUES(state_json)`,
     [stateKey, JSON.stringify(payload)]
   );
+
+  if (stateKey === "app") {
+    await replaceTasksSnapshot(payload?.tasks ?? []);
+    await replaceProjectsSnapshot(payload?.projects ?? []);
+  }
 };
 
 export const getAuthState = async () => {

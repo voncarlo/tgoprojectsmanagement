@@ -50,7 +50,7 @@ const initialsOf = (name: string) =>
   name.trim().split(/\s+/).map((n) => n[0]).slice(0, 2).join("").toUpperCase() || "··";
 
 const Users = () => {
-  const { isAdmin, isSuperAdmin, userList, setUserList, currentUser, setPasswordForUser, deleteUser } = useAuth();
+  const { isAdmin, isSuperAdmin, userList, setUserList, currentUser, setPasswordForUser, resetPasswordForEmail, deleteUser } = useAuth();
   const [q, setQ] = useState("");
   const [teamFilter, setTeamFilter] = useState<string>("all");
   const [roleFilter, setRoleFilter] = useState<string>("all");
@@ -97,9 +97,21 @@ const Users = () => {
   };
 
   const doReset = () => {
-    if (!resetting || pwd.length < 6) return toast.error("Password must be at least 6 characters.");
+    if (!resetting || pwd.length < 8) return toast.error("Password must be at least 8 characters.");
     setPasswordForUser(resetting.id, pwd);
     toast.success(`Password reset for ${resetting.name}`);
+    setResetting(null);
+    setPwd("");
+  };
+
+  const sendTemporaryReset = async () => {
+    if (!resetting) return;
+    const result = await resetPasswordForEmail(resetting.email);
+    if (!result.ok) {
+      toast.error(result.message ?? "Unable to send reset email.");
+      return;
+    }
+    toast.success(result.message ?? `Temporary password sent to ${resetting.email}`);
     setResetting(null);
     setPwd("");
   };
@@ -356,11 +368,22 @@ const Users = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Reset password</DialogTitle>
-            <DialogDescription>Set a new password for {resetting?.name}. They will be required to sign in again.</DialogDescription>
+            <DialogDescription>Admins and Super Admins can set a password directly or send a temporary password to {resetting?.name}'s email.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-2 py-2">
-            <Label>New password</Label>
-            <Input type="password" value={pwd} onChange={(e) => setPwd(e.target.value)} placeholder="Min 6 characters" />
+          <div className="space-y-4 py-2">
+            <div className="rounded-lg border border-border bg-muted/20 p-3">
+              <p className="text-sm font-medium">Send temporary reset email</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                A temporary password will be emailed privately to {resetting?.email}. This requires password reset email to be configured on the server.
+              </p>
+              <Button className="mt-3 w-full" variant="outline" onClick={sendTemporaryReset}>Send temporary reset</Button>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Set password manually</Label>
+              <Input type="password" value={pwd} onChange={(e) => setPwd(e.target.value)} placeholder="Min 8 characters" />
+              <p className="text-xs text-muted-foreground">Use this if email reset is unavailable and you need to hand the password to the user yourself.</p>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setResetting(null)}>Cancel</Button>

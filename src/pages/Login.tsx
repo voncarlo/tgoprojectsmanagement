@@ -23,7 +23,6 @@ const Login = () => {
   const [error, setError] = useState<string | null>(null);
   const [forgotOpen, setForgotOpen] = useState(false);
   const [forgotEmail, setForgotEmail] = useState("");
-  const [temporaryPassword, setTemporaryPassword] = useState<string | null>(null);
 
   useEffect(() => {
     if (!rememberedEmail) return;
@@ -51,14 +50,14 @@ const Login = () => {
     }, 600);
   };
 
-  const handleForgotPassword = () => {
-    const result = resetPasswordForEmail(forgotEmail || email);
+  const handleForgotPassword = async () => {
+    const result = await resetPasswordForEmail(forgotEmail || email);
     if (!result.ok) {
       toast.error(result.message ?? "Unable to reset password.");
       return;
     }
-    setTemporaryPassword(result.temporaryPassword ?? null);
-    toast.success(result.message ?? "Temporary password created.");
+    toast.success(result.message ?? "Temporary password sent to your email.");
+    setForgotOpen(false);
   };
 
   return (
@@ -138,7 +137,6 @@ const Login = () => {
                 type="button"
                 onClick={() => {
                   setForgotEmail(email);
-                  setTemporaryPassword(null);
                   setForgotOpen(true);
                 }}
                 className="text-sm font-medium text-primary hover:underline"
@@ -180,7 +178,7 @@ const Login = () => {
           <DialogHeader>
             <DialogTitle>Forgot password</DialogTitle>
             <DialogDescription>
-              Generate a temporary password for your account, then change it after you sign in.
+              Send a temporary password to your account email, then change it after you sign in.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -194,16 +192,13 @@ const Login = () => {
                 placeholder="Enter your account email"
               />
             </div>
-            {temporaryPassword && (
-              <div className="rounded-xl border border-primary/30 bg-primary/5 p-3">
-                <p className="text-xs uppercase tracking-wider text-muted-foreground">Temporary password</p>
-                <p className="mt-1 text-sm font-semibold text-foreground">{temporaryPassword}</p>
-              </div>
-            )}
+            <p className="text-xs text-muted-foreground">
+              For privacy, the temporary password is not shown here. If email reset is unavailable, contact an Admin or Super Admin.
+            </p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setForgotOpen(false)}>Close</Button>
-            <Button className="gradient-primary text-primary-foreground" onClick={handleForgotPassword}>Generate reset</Button>
+            <Button className="gradient-primary text-primary-foreground" onClick={handleForgotPassword}>Send reset email</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -4,7 +4,7 @@ import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ensureSchema, getPool, hasDatabaseConfig } from "./server/db.mjs";
-import { getAuthState, getStateSnapshot, listProjects, listTasks, listUsers, migrateLegacyAuthSnapshot, saveAuthState, saveStateSnapshot, seedDatabase } from "./server/repository.mjs";
+import { findUserByEmail, getAuthState, getStateSnapshot, listProjects, listTasks, listUsers, migrateLegacyAuthSnapshot, saveAuthState, saveStateSnapshot, saveUserPassword, seedDatabase } from "./server/repository.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,6 +32,41 @@ const contentTypes = new Map([
 const sendJson = (res, statusCode, payload) => {
   res.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(payload));
+};
+
+const resetEmailConfigured = () => Boolean(process.env.RESEND_API_KEY && process.env.MAIL_FROM);
+
+const sendPasswordResetEmail = async ({ email, temporaryPassword, userName }) => {
+  if (!resetEmailConfigured()) {
+    throw new Error("Password reset email is not configured.");
+  }
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: process.env.MAIL_FROM,
+      to: [email],
+      subject: "Your temporary TGO Projects Portal password",
+      html: `
+        <div style="font-family: Arial, sans-serif; line-height: 1.5; color: #0f172a;">
+          <p>Hello ${userName},</p>
+          <p>A temporary password was requested for your TGO Projects Portal account.</p>
+          <p><strong>Temporary password:</strong> ${temporaryPassword}</p>
+          <p>Please sign in with this password, then change it immediately in Settings.</p>
+          <p>If you did not request this, contact your Admin or Super Admin right away.</p>
+        </div>
+      `,
+    }),
+  });
+
+  if (!response.ok) {
+    const payload = await response.text();
+    throw new Error(payload || "Email delivery failed.");
+  }
 };
 
 const readJsonBody = async (req) => {
@@ -79,6 +114,41 @@ const handleApiRequest = async (req, res, pathname) => {
     const body = await readJsonBody(req);
     await saveAuthState(body);
     sendJson(res, 200, { ok: true });
+    return true;
+  }
+
+  if (pathname === "/api/auth/password-reset-request" && req.method === "POST") {
+    const body = await readJsonBody(req);
+    const email = String(body.email ?? "").trim().toLowerCase();
+    if (!email) {
+      sendJson(res, 400, { ok: false, error: "Email is required." });
+      return true;
+    }
+
+    const account = await findUserByEmail(email);
+    if (!account) {
+      sendJson(res, 404, { ok: false, error: "No account found for that email." });
+      return true;
+    }
+
+    if (account.status !== "Active") {
+      sendJson(res, 400, { ok: false, error: "This account is inactive." });
+      return true;
+    }
+
+    if (!resetEmailConfigured()) {
+      sendJson(res, 503, { ok: false, error: "Password reset email is not configured. Contact an Admin or Super Admin." });
+      return true;
+    }
+
+    const temporaryPassword = `TGO-${Math.random().toString(36).slice(2, 6).toUpperCase()}!`;
+    await sendPasswordResetEmail({
+      email: account.email,
+      temporaryPassword,
+      userName: account.name,
+    });
+    await saveUserPassword(account.id, temporaryPassword);
+    sendJson(res, 200, { ok: true, message: "Temporary password sent to your email." });
     return true;
   }
 

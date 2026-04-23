@@ -21,7 +21,7 @@ interface AuthCtx {
   signOut: () => void;
   updatePassword: (currentPassword: string, nextPassword: string, userId?: string) => { ok: boolean; message?: string };
   setPasswordForUser: (userId: string, nextPassword: string) => void;
-  resetPasswordForEmail: (email: string) => { ok: boolean; message?: string; temporaryPassword?: string };
+  resetPasswordForEmail: (email: string) => Promise<{ ok: boolean; message?: string }>;
   rememberedEmail: string;
   deleteUser: (userId: string) => void;
 }
@@ -79,6 +79,19 @@ const defaultAuthState: PersistedAuthState = {
   passwords: defaultPasswords,
   userList: seedUsers,
   sessionLogs: [],
+};
+
+const requestPasswordReset = async (email: string): Promise<{ ok: boolean; message?: string }> => {
+  const response = await fetch("/api/auth/password-reset-request", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  const payload = (await response.json().catch(() => ({}))) as { ok?: boolean; message?: string; error?: string };
+  if (!response.ok || !payload.ok) {
+    return { ok: false, message: payload.error ?? payload.message ?? "Unable to reset password." };
+  }
+  return { ok: true, message: payload.message ?? "Temporary password sent to your email." };
 };
 
 const VALID_ROLES = new Set(Object.keys(ROLE_MODULES) as User["role"][]);
@@ -336,18 +349,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setPasswordForUser: (userId, nextPassword) => {
         setPasswords((prev) => ({ ...prev, [userId]: nextPassword }));
       },
-      resetPasswordForEmail: (email) => {
-        const account = userList.find((user) => user.email.toLowerCase() === email.trim().toLowerCase());
-        if (!account) return { ok: false, message: "No account found for that email." };
-        if (account.status !== "Active") return { ok: false, message: "This account is inactive." };
-        const temporaryPassword = `TGO-${Math.random().toString(36).slice(2, 6).toUpperCase()}!`;
-        setPasswords((prev) => ({ ...prev, [account.id]: temporaryPassword }));
-        return {
-          ok: true,
-          message: "Temporary password created. Sign in and change it right away in Settings.",
-          temporaryPassword,
-        };
-      },
+      resetPasswordForEmail: async (email) => requestPasswordReset(email),
       rememberedEmail,
       deleteUser: (userId) => {
         setUserList((prev) => prev.filter((user) => user.id !== userId));
@@ -399,7 +401,7 @@ export const useAuth = (): AuthCtx => {
     signOut: () => {},
     updatePassword: () => ({ ok: false, message: "Authentication unavailable." }),
     setPasswordForUser: () => {},
-    resetPasswordForEmail: () => ({ ok: false, message: "Authentication unavailable." }),
+    resetPasswordForEmail: async () => ({ ok: false, message: "Authentication unavailable." }),
     rememberedEmail: "",
     deleteUser: () => {},
   };
