@@ -230,6 +230,7 @@ const recomputeProgress = (project: Project): Project => {
 };
 
 const normalizeSubtasks = (subtasks?: Subtask[]) => subtasks ?? [];
+const normalizeCoOwners = (coOwners?: string[]) => [...new Set((coOwners ?? []).map((name) => name.trim()).filter(Boolean))];
 
 const roleNeedsApproval = (role: string) => role === "Staff";
 
@@ -555,11 +556,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       const next: Project = {
         ...projectInput,
         id: id("p"),
-        milestones: projectInput.milestones ?? [
-          { name: "Kickoff", done: false },
-          { name: "Build", done: false },
-          { name: "Launch", done: false },
-        ],
+        milestones: projectInput.milestones ?? [],
+        coOwners: normalizeCoOwners(projectInput.coOwners),
         requiresApproval,
         approver: requiresApproval ? projectInput.approver : undefined,
         approvalHistory: [],
@@ -590,6 +588,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           let nextProject = recomputeProgress({
             ...project,
             ...patch,
+            coOwners: normalizeCoOwners(patch.coOwners ?? project.coOwners),
             requiresApproval: patch.requiresApproval ?? project.requiresApproval,
             approver: (patch.requiresApproval ?? project.requiresApproval) ? patch.approver ?? project.approver : undefined,
             subtasks: normalizeSubtasks(patch.subtasks ?? project.subtasks),

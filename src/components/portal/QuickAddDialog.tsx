@@ -49,7 +49,6 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
 
   const [pName, setPName] = useState("");
   const [pDesc, setPDesc] = useState("");
-  const [pTasks, setPTasks] = useState("");
   const [pSubtasks, setPSubtasks] = useState("");
   const [pTeam, setPTeam] = useState<TeamId>(initialTeam);
   const [pOwner, setPOwner] = useState(currentUser.name);
@@ -72,7 +71,6 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
     setTSubtasks("");
     setPName("");
     setPDesc("");
-    setPTasks("");
     setPSubtasks("");
   };
 
@@ -102,26 +100,12 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
       description: pDesc || "-",
       team: pTeam,
       owner: pOwner,
+      coOwners: [],
       status: pStatus,
       progress: 0,
       start: pStart,
       end: pEnd,
       subtasks: parseSubtasks(pSubtasks),
-    });
-    parseSubtasks(pTasks).forEach((projectTask) => {
-      addTask({
-        title: projectTask.title,
-        assignee: pOwner,
-        team: pTeam,
-        priority: "Medium",
-        status: "Not Started",
-        due: pEnd,
-        notes: `Linked to project: ${createdProject.name}`,
-        project: createdProject.name,
-        subtasks: [],
-        approvalStatus: undefined,
-        approvalHistory: [],
-      });
     });
     toast.success("Project created");
     reset();
@@ -225,15 +209,6 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
             <div className="space-y-2">
               <Label>Description</Label>
               <Textarea rows={2} value={pDesc} onChange={(event) => setPDesc(event.target.value)} placeholder="Brief description" />
-            </div>
-            <div className="space-y-2">
-              <Label>Project tasks</Label>
-              <Textarea
-                rows={4}
-                value={pTasks}
-                onChange={(event) => setPTasks(event.target.value)}
-                placeholder={"One task per line\nExample:\nCollect requirements\nAssign stakeholders\nPrepare rollout plan"}
-              />
             </div>
             <div className="space-y-2">
               <Label>Subtasks</Label>
