@@ -14,14 +14,9 @@ import { useData } from "@/store/DataContext";
 import { toast } from "sonner";
 
 const PRIORITIES: Priority[] = ["Low", "Medium", "High", "Urgent"];
-const STATUSES: TaskStatus[] = ["Not Started", "In Progress", "On Hold", "Completed"];
+const DIRECT_TASK_STATUSES: TaskStatus[] = ["Not Started", "In Progress", "On Hold", "Completed"];
+const REQUEST_TASK_STATUSES: TaskStatus[] = ["Not Started", "In Progress", "On Hold"];
 const PROJECT_STATUSES: ProjectStatus[] = ["Planning", "Active", "At Risk", "Completed"];
-const parseSubtasks = (value: string) =>
-  value
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((title, index) => ({ id: `sub-${Date.now()}-${index}`, title, done: false }));
 
 interface Props {
   open: boolean;
@@ -32,7 +27,7 @@ interface Props {
 }
 
 export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaultTeam, defaultStatus }: Props) => {
-  const { currentUser, visibleTeams, userList } = useAuth();
+  const { currentUser, visibleTeams, userList, can } = useAuth();
   const { addTask, addProject } = useData();
   const teamsAvailable = teams.filter((team) => visibleTeams.includes(team.id));
   const initialTeam = defaultTeam ?? (teamsAvailable[0]?.id ?? currentUser.team);
@@ -46,7 +41,6 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
   const [tStatus, setTStatus] = useState<TaskStatus>(defaultStatus ?? "Not Started");
   const [tDue, setTDue] = useState(new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10));
   const [tNotes, setTNotes] = useState("");
-  const [tSubtasks, setTSubtasks] = useState("");
 
   const [pName, setPName] = useState("");
   const [pDesc, setPDesc] = useState("");
@@ -64,10 +58,10 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
     if (open) {
       setTab(defaultTab);
       setTTeam(defaultTeam ?? initialTeam);
-      setTStatus(defaultStatus ?? "Not Started");
+      setTStatus((defaultStatus ?? "Not Started") === "Completed" && !can("task.create") ? "Not Started" : (defaultStatus ?? "Not Started"));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, defaultTab, defaultTeam, defaultStatus]);
+  }, [open, defaultTab, defaultTeam, defaultStatus, can]);
 
   useEffect(() => {
     setPMembers((current) => current.filter((member) => member !== pOwner));
@@ -77,7 +71,6 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
   const reset = () => {
     setTTitle("");
     setTNotes("");
-    setTSubtasks("");
     setPName("");
     setPDesc("");
     setPSubtaskDraft("");
@@ -88,19 +81,19 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
 
   const submitTask = () => {
     if (!tTitle.trim()) return toast.error("Task title is required");
-    addTask({
+    const createdTask = addTask({
       title: tTitle.trim(),
+      assignedBy: currentUser.name,
       assignee: tAssignee,
       team: tTeam,
       priority: tPriority,
       status: tStatus,
       due: tDue,
       notes: tNotes || undefined,
-      subtasks: parseSubtasks(tSubtasks),
       approvalStatus: undefined,
       approvalHistory: [],
     });
-    toast.success("Task created");
+    toast.success(createdTask ? "Task created" : "Task request sent for approval");
     reset();
     onOpenChange(false);
   };
@@ -125,6 +118,7 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
   };
 
   const availableMembers = userList.filter((user) => user.name !== pOwner && !pMembers.includes(user.name));
+  const taskStatuses = can("task.create") ? DIRECT_TASK_STATUSES : REQUEST_TASK_STATUSES;
 
   const addProjectSubtask = () => {
     if (!pSubtaskDraft.trim()) return;
@@ -158,7 +152,11 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
-                <Label>Assignee</Label>
+                <Label>Assigned by</Label>
+                <Input value={currentUser.name} disabled />
+              </div>
+              <div className="space-y-2">
+                <Label>Assigned to</Label>
                 <Select value={tAssignee} onValueChange={setTAssignee}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -189,7 +187,7 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
                 <Select value={tStatus} onValueChange={(value) => setTStatus(value as TaskStatus)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {STATUSES.map((status) => <SelectItem key={status} value={status}>{status}</SelectItem>)}
+                    {taskStatuses.map((status) => <SelectItem key={status} value={status}>{status}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -202,28 +200,24 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
               <Label>Notes</Label>
               <Textarea rows={3} value={tNotes} onChange={(event) => setTNotes(event.target.value)} placeholder="Optional context..." />
             </div>
-            <div className="space-y-2">
-              <Label>Subtasks</Label>
-              <Textarea rows={4} value={tSubtasks} onChange={(event) => setTSubtasks(event.target.value)} placeholder={"One subtask per line\nExample:\nDraft outline\nReview with manager\nSubmit final copy"} />
-            </div>
             <div className="rounded-lg border border-border bg-muted/30 p-3">
               <div className="flex items-start gap-2.5">
                 <div className="h-8 w-8 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
                   <ShieldCheck className="h-4 w-4" />
                 </div>
                 <div>
-                  <p className="text-sm font-medium">Completion approval</p>
+                  <p className="text-sm font-medium">{can("task.create") ? "Task permissions" : "Request approval"}</p>
                   <p className="text-xs text-muted-foreground">
-                    {creatorNeedsApproval
-                      ? "Staff-created tasks go to any manager, admin, or super admin when marked complete."
-                      : "Tasks created by managers, admins, and super admins can be completed without extra approval."}
+                    {can("task.create")
+                      ? "Admins, managers, and super admins can create tasks directly. Only they can mark tasks as completed."
+                      : "Staff task requests go to Approvals first and stay off the Tasks page until approved."}
                   </p>
                 </div>
               </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button className="gradient-primary text-primary-foreground" onClick={submitTask}>Create task</Button>
+              <Button className="gradient-primary text-primary-foreground" onClick={submitTask}>{can("task.create") ? "Create task" : "Request task"}</Button>
             </DialogFooter>
           </TabsContent>
 

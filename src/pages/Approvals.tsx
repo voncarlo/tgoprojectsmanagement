@@ -164,6 +164,18 @@ const Approvals = () => {
                   <Badge variant="outline" className={cn("text-[10px]", TYPE_TONE[open.type])}>{open.type}</Badge>
                   <Badge variant="outline" className={cn("text-[10px]", STATUS_TONE[open.status])}>{open.status}</Badge>
                 </div>
+                {open.taskDraft && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium mb-1">Assigned by</p>
+                      <p className="text-sm">{open.taskDraft.assignedBy ?? open.requester}</p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium mb-1">Assigned to</p>
+                      <p className="text-sm">{open.taskDraft.assignee}</p>
+                    </div>
+                  </div>
+                )}
                 {open.amount && <div><p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Amount</p><p className="text-2xl font-semibold">${open.amount.toLocaleString()}</p></div>}
                 {open.notes && <div><p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium mb-1">Notes</p><p className="text-sm">{open.notes}</p></div>}
 

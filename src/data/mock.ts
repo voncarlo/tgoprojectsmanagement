@@ -102,6 +102,7 @@ export interface NotificationSettings {
 export interface Task {
   id: string;
   title: string;
+  assignedBy?: string;
   assignee: string;
   team: TeamId;
   priority: Priority;
@@ -302,6 +303,7 @@ export interface Approval {
   submitted: string;
   notes?: string;
   requestedById?: string;
+  taskDraft?: Omit<Task, "id">;
   calendarEventDraft?: Omit<CalendarEvent, "id">;
 }
 

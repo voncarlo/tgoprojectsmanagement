@@ -8,6 +8,7 @@ interface AuthCtx {
   updateCurrentUser: (patch: Partial<User>) => void;
   userList: User[];
   setUserList: (u: User[]) => void;
+  sessionLogs: SessionLogEntry[];
   isSuperAdmin: boolean;
   isAdmin: boolean;
   isManager: boolean;
@@ -27,9 +28,18 @@ interface AuthCtx {
 
 interface PersistedAuthState {
   version?: number;
-  currentUserId: string;
   passwords: Record<string, string>;
   userList: User[];
+  sessionLogs: SessionLogEntry[];
+}
+
+export interface SessionLogEntry {
+  id: string;
+  userId: string;
+  userName: string;
+  userRole: User["role"];
+  action: "Signed in" | "Signed out";
+  at: string;
 }
 
 const fetchServerState = async (): Promise<PersistedAuthState | null> => {
@@ -48,8 +58,9 @@ const saveServerState = async (state: PersistedAuthState) => {
 };
 
 const STORAGE_KEY = "tgo.auth";
+const CURRENT_USER_STORAGE_KEY = "tgo.auth.currentUserId";
 const REMEMBER_EMAIL_KEY = "tgo.auth.rememberedEmail";
-const STORAGE_VERSION = 6;
+const STORAGE_VERSION = 7;
 const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   enabled: true,
   digest: true,
@@ -65,9 +76,9 @@ const defaultPasswords = seedUsers.reduce<Record<string, string>>((acc, user) =>
 
 const defaultAuthState: PersistedAuthState = {
   version: STORAGE_VERSION,
-  currentUserId: seedUsers[0].id,
   passwords: defaultPasswords,
   userList: seedUsers,
+  sessionLogs: [],
 };
 
 const VALID_ROLES = new Set(Object.keys(ROLE_MODULES) as User["role"][]);
@@ -123,6 +134,14 @@ const mergeUsers = (savedUsers: User[] | undefined): User[] => {
   return normalizedSaved.length > 0 ? normalizedSaved : seedUsers.map(normalizeUser);
 };
 
+const getDefaultCurrentUserId = (users: User[]) => users[0]?.id ?? seedUsers[0].id;
+
+const loadLocalCurrentUserId = (users: User[]) => {
+  if (typeof window === "undefined") return getDefaultCurrentUserId(users);
+  const savedUserId = window.localStorage.getItem(CURRENT_USER_STORAGE_KEY);
+  return users.some((user) => user.id === savedUserId) ? (savedUserId as string) : getDefaultCurrentUserId(users);
+};
+
 const loadAuthState = (): PersistedAuthState => {
   if (typeof window === "undefined") return defaultAuthState;
   try {
@@ -130,13 +149,11 @@ const loadAuthState = (): PersistedAuthState => {
     if (!raw) return defaultAuthState;
     const parsed = JSON.parse(raw) as Partial<PersistedAuthState>;
     if (parsed.version !== STORAGE_VERSION) return defaultAuthState;
-    const mergedUsers = mergeUsers(parsed.userList);
-    const hasCurrent = mergedUsers.some((user) => user.id === parsed.currentUserId);
     return {
       version: STORAGE_VERSION,
-      currentUserId: hasCurrent ? parsed.currentUserId ?? defaultAuthState.currentUserId : defaultAuthState.currentUserId,
       passwords: { ...defaultPasswords, ...(parsed.passwords ?? {}) },
-      userList: mergedUsers,
+      userList: mergeUsers(parsed.userList),
+      sessionLogs: parsed.sessionLogs ?? defaultAuthState.sessionLogs,
     };
   } catch {
     return defaultAuthState;
@@ -148,8 +165,9 @@ const AuthContext = createContext<AuthCtx | null>(null);
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const initialState = loadAuthState();
   const [userList, setUserList] = useState<User[]>(initialState.userList);
-  const [currentUserId, setCurrentUserId] = useState<string>(initialState.currentUserId);
+  const [currentUserId, setCurrentUserId] = useState<string>(() => loadLocalCurrentUserId(initialState.userList));
   const [passwords, setPasswords] = useState<Record<string, string>>(initialState.passwords);
+  const [sessionLogs, setSessionLogs] = useState<SessionLogEntry[]>(initialState.sessionLogs);
   const [serverHydrated, setServerHydrated] = useState(false);
   const [rememberedEmail, setRememberedEmail] = useState<string>(() => {
     if (typeof window === "undefined") return "";
@@ -172,8 +190,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const hasCurrentUser = userList.some((user) => user.id === currentUserId);
-    if (!hasCurrentUser && userList[0]) setCurrentUserId(userList[0].id);
+    if (!hasCurrentUser) setCurrentUserId(getDefaultCurrentUserId(userList));
   }, [currentUserId, userList]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(CURRENT_USER_STORAGE_KEY, currentUserId);
+  }, [currentUserId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -181,12 +204,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       STORAGE_KEY,
       JSON.stringify({
         version: STORAGE_VERSION,
-        currentUserId,
         passwords,
         userList,
+        sessionLogs,
       } satisfies PersistedAuthState)
     );
-  }, [currentUserId, passwords, userList]);
+  }, [passwords, sessionLogs, userList]);
 
   useEffect(() => {
     let cancelled = false;
@@ -196,10 +219,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const remoteState = await fetchServerState();
         if (!remoteState || cancelled) return;
         const mergedUsers = mergeUsers(remoteState.userList);
-        const hasCurrent = mergedUsers.some((user) => user.id === remoteState.currentUserId);
         setUserList(mergedUsers);
         setPasswords({ ...defaultPasswords, ...(remoteState.passwords ?? {}) });
-        setCurrentUserId(hasCurrent ? remoteState.currentUserId : mergedUsers[0]?.id ?? defaultAuthState.currentUserId);
+        setSessionLogs(remoteState.sessionLogs ?? defaultAuthState.sessionLogs);
       } catch {
         // Fallback to local storage state when the API is unavailable.
       } finally {
@@ -217,11 +239,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (!serverHydrated) return;
     void saveServerState({
       version: STORAGE_VERSION,
-      currentUserId,
       passwords,
       userList,
+      sessionLogs,
     });
-  }, [currentUserId, passwords, serverHydrated, userList]);
+  }, [passwords, serverHydrated, sessionLogs, userList]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -233,6 +255,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [rememberedEmail]);
 
   const currentUser = userList.find((user) => user.id === currentUserId) ?? userList[0] ?? seedUsers[0];
+
+  const appendSessionLog = (user: User, action: SessionLogEntry["action"]) => {
+    setSessionLogs((prev) => [
+      {
+        id: `session-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        userId: user.id,
+        userName: user.name,
+        userRole: user.role,
+        action,
+        at: new Date().toISOString(),
+      },
+      ...prev,
+    ]);
+  };
 
   const value = useMemo<AuthCtx>(() => {
     const isSuperAdmin = currentUser.role === "Super Admin";
@@ -258,6 +294,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       },
       userList,
       setUserList,
+      sessionLogs,
       isSuperAdmin,
       isAdmin,
       isManager,
@@ -281,12 +318,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           return { ok: false, message: "Incorrect password." };
         }
         setRememberedEmail(options?.remember ? account.email : "");
+        appendSessionLog(account, "Signed in");
         setCurrentUserId(account.id);
         return { ok: true };
       },
       signOut: () => {
-        const fallback = userList.find((user) => user.status === "Active") ?? seedUsers[0];
-        setCurrentUserId(fallback.id);
+        appendSessionLog(currentUser, "Signed out");
+        setCurrentUserId(getDefaultCurrentUserId(userList));
       },
       updatePassword: (currentPassword, nextPassword, userId = currentUser.id) => {
         if ((passwords[userId] ?? "") !== currentPassword) {
@@ -318,10 +356,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           delete next[userId];
           return next;
         });
-        if (currentUserId === userId) setCurrentUserId(seedUsers[0].id);
+        if (currentUserId === userId) setCurrentUserId(getDefaultCurrentUserId(userList.filter((user) => user.id !== userId)));
       },
     };
-  }, [currentUser, currentUserId, passwords, userList]);
+  }, [currentUser, currentUserId, passwords, sessionLogs, userList]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
@@ -348,6 +386,7 @@ export const useAuth = (): AuthCtx => {
     updateCurrentUser: () => {},
     userList: [],
     setUserList: () => {},
+    sessionLogs: [],
     isSuperAdmin: false,
     isAdmin: false,
     isManager: false,

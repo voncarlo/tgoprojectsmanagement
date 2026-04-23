@@ -43,6 +43,7 @@ const getNextProjectStatus = (project: Pick<Project, "status" | "milestones" | "
 };
 const canManageProjectWork = (project: Project, userName: string) =>
   project.owner === userName || (project.coOwners ?? []).includes(userName);
+const sortProjectSubtasks = (subtasks: Subtask[]) => [...subtasks].sort((left, right) => Number(left.done) - Number(right.done));
 
 const Projects = () => {
   const { visibleTeams, currentUser, isManager, can, userList } = useAuth();
@@ -103,13 +104,14 @@ const Projects = () => {
 
   const updateSelectedSubtasks = (nextSubtasks: Subtask[], options?: { preserveStatus?: boolean; allowStatusChange?: boolean }) => {
     if (!selectedProject) return;
+    const orderedSubtasks = sortProjectSubtasks(nextSubtasks);
     const nextStatus =
       options?.preserveStatus || options?.allowStatusChange === false
         ? selectedProject.status
-        : getNextProjectStatus({ ...selectedProject, subtasks: nextSubtasks });
-    const progress = getProjectProgress({ ...selectedProject, subtasks: nextSubtasks });
+        : getNextProjectStatus({ ...selectedProject, subtasks: orderedSubtasks });
+    const progress = getProjectProgress({ ...selectedProject, subtasks: orderedSubtasks });
     syncProject({
-      subtasks: nextSubtasks,
+      subtasks: orderedSubtasks,
       progress,
       ...(nextStatus !== selectedProject.status ? { status: nextStatus } : {}),
     });
@@ -143,7 +145,7 @@ const Projects = () => {
         {list.map((project) => {
           const team = teams.find((entry) => entry.id === project.team)!;
           const canManageWork = canManageProjectWork(project, currentUser.name);
-          const subtasks = project.subtasks ?? [];
+          const subtasks = sortProjectSubtasks(project.subtasks ?? []);
           const memberCount = project.coOwners?.length ?? 0;
 
           return (
@@ -193,9 +195,9 @@ const Projects = () => {
                       onClick={(event) => {
                         event.stopPropagation();
                         if (!canManageWork) return;
-                        const nextSubtasks = subtasks.map((item) =>
+                        const nextSubtasks = sortProjectSubtasks(subtasks.map((item) =>
                           item.id === subtask.id ? { ...item, done: !item.done } : item
-                        );
+                        ));
                         const canChangeStatus = project.owner === currentUser.name;
                         const nextStatus = canChangeStatus ? getNextProjectStatus({ ...project, subtasks: nextSubtasks }) : project.status;
                         updateProject(project.id, {
@@ -520,9 +522,9 @@ const Projects = () => {
                             type="button"
                             disabled={!canManageWork}
                             onClick={() => {
-                              const nextSubtasks = (selectedProject.subtasks ?? []).map((item) =>
+                              const nextSubtasks = sortProjectSubtasks((selectedProject.subtasks ?? []).map((item) =>
                                 item.id === subtask.id ? { ...item, done: !item.done } : item
-                              );
+                              ));
                               updateSelectedSubtasks(nextSubtasks, { allowStatusChange: isProjectOwner });
                             }}
                             className={cn("shrink-0", !canManageWork && "cursor-not-allowed")}

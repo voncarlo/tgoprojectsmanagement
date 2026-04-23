@@ -115,7 +115,7 @@ interface DataCtx {
   recycleBin: RecycleBinItem[];
   chats: ChatMessage[];
   personalNotes: PersonalNote[];
-  addTask: (t: Omit<Task, "id">) => Task;
+  addTask: (t: Omit<Task, "id">) => Task | null;
   updateTask: (id: string, patch: Partial<Task>) => void;
   removeTask: (id: string) => void;
   addProject: (p: Omit<Project, "id" | "milestones"> & { milestones?: Milestone[] }) => Project;
@@ -240,12 +240,17 @@ const recomputeProgress = (project: Project): Project => {
 
 const normalizeSubtasks = (subtasks?: Subtask[]) => subtasks ?? [];
 const normalizeCoOwners = (coOwners?: string[]) => [...new Set((coOwners ?? []).map((name) => name.trim()).filter(Boolean))];
+const sortOpenSubtasksFirst = (subtasks?: Subtask[]) => {
+  const normalized = normalizeSubtasks(subtasks);
+  return [...normalized].sort((left, right) => Number(left.done) - Number(right.done));
+};
 
 const roleNeedsApproval = (role: string) => role === "Staff";
 
 export const DataProvider = ({ children }: { children: ReactNode }) => {
   const auth = useAuth();
   const currentUser = auth.currentUser;
+  const canDirectTaskCreate = auth.can("task.create");
   const initialState = loadState();
 
   const [tasks, setTasks] = useState<Task[]>(initialState.tasks);
@@ -416,17 +421,62 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     [currentUser.name]
   );
 
-  const addTask: DataCtx["addTask"] = useCallback(
-    (taskInput) => {
-      const requiresApproval = roleNeedsApproval(currentUser.role);
-      const next: Task = {
+  const buildTaskRecord = useCallback(
+    (taskInput: Omit<Task, "id">, options?: { requiresApproval?: boolean; approvalHistory?: ApprovalHistoryEntry[] }) => {
+      const requiresApproval = options?.requiresApproval ?? roleNeedsApproval(currentUser.role);
+      return {
         ...taskInput,
         id: id("t"),
+        assignedBy: taskInput.assignedBy ?? currentUser.name,
         requiresApproval,
         approver: requiresApproval ? taskInput.approver : undefined,
-        approvalHistory: taskInput.approvalHistory ?? [],
+        approvalHistory: options?.approvalHistory ?? taskInput.approvalHistory ?? [],
+        subtasks: normalizeSubtasks(taskInput.subtasks),
+      } satisfies Task;
+    },
+    [currentUser.name, currentUser.role]
+  );
+
+  const addTask: DataCtx["addTask"] = useCallback(
+    (taskInput) => {
+      const normalizedTask = {
+        ...taskInput,
+        assignedBy: taskInput.assignedBy ?? currentUser.name,
         subtasks: normalizeSubtasks(taskInput.subtasks),
       };
+
+      if (!canDirectTaskCreate) {
+        const approval: Approval = {
+          id: id("ap"),
+          type: "Task",
+          title: normalizedTask.title,
+          requester: currentUser.name,
+          requestedById: currentUser.id,
+          team: normalizedTask.team,
+          status: "Pending",
+          submitted: todayIso(),
+          notes: normalizedTask.notes,
+          taskDraft: {
+            ...normalizedTask,
+            status: normalizedTask.status === "Completed" ? "Not Started" : normalizedTask.status,
+            requiresApproval: false,
+            approvalStatus: undefined,
+            approvalHistory: [],
+          },
+        };
+        setApprovals((items) => [approval, ...items]);
+        pushActivity({ user: currentUser.name, action: "requested task", target: normalizedTask.title });
+        appendAudit({
+          user: currentUser.name,
+          action: "Submitted task request",
+          target: normalizedTask.title,
+          category: "Approval",
+          team: normalizedTask.team,
+        });
+        return null;
+      }
+
+      const next = buildTaskRecord(normalizedTask);
       setTasks((items) => [next, ...items]);
       pushActivity({ user: currentUser.name, action: "created task", target: next.title });
       appendAudit({
@@ -438,7 +488,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       });
       return next;
     },
-    [appendAudit, currentUser.name, currentUser.role, pushActivity]
+    [appendAudit, buildTaskRecord, canDirectTaskCreate, currentUser.id, currentUser.name, pushActivity]
   );
 
   const updateTask: DataCtx["updateTask"] = useCallback(
@@ -460,6 +510,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           if (
             patch.status === "Completed" &&
             task.status !== "Completed" &&
+            currentUser.role === "Staff" &&
             next.requiresApproval &&
             next.approvalStatus !== "Approved"
           ) {
@@ -574,7 +625,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         requiresApproval,
         approver: requiresApproval ? projectInput.approver : undefined,
         approvalHistory: [],
-        subtasks: normalizeSubtasks(projectInput.subtasks),
+        subtasks: sortOpenSubtasksFirst(projectInput.subtasks),
       };
       const withProgress = recomputeProgress(next);
       setProjects((items) => [withProgress, ...items]);
@@ -604,7 +655,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             coOwners: normalizeCoOwners(patch.coOwners ?? project.coOwners),
             requiresApproval: patch.requiresApproval ?? project.requiresApproval,
             approver: (patch.requiresApproval ?? project.requiresApproval) ? patch.approver ?? project.approver : undefined,
-            subtasks: normalizeSubtasks(patch.subtasks ?? project.subtasks),
+            subtasks: sortOpenSubtasksFirst(patch.subtasks ?? project.subtasks),
           });
           if (
             patch.status === "Completed" &&
@@ -1072,7 +1123,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       });
       pushActivity({ user: currentUser.name, action: "deleted calendar event", target: removedEvent.title });
     },
-    [appendAudit, currentUser.name, pushActivity]
+    [appendAudit, currentUser.name, currentUser.role, pushActivity]
   );
 
   const requestCalendarPto: DataCtx["requestCalendarPto"] = useCallback(
@@ -1124,6 +1175,30 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
                 : null;
         if (taskDecision) decideTaskApproval(updatedApproval.taskId, taskDecision, comment);
       }
+      if (updatedApproval.taskDraft && status === "Approved") {
+        const createdTask = buildTaskRecord(
+          {
+            ...updatedApproval.taskDraft,
+            requiresApproval: false,
+            approvalStatus: undefined,
+            approvalHistory: [],
+          },
+          { requiresApproval: false, approvalHistory: [] }
+        );
+        setTasks((items) => [createdTask, ...items]);
+        pushActivity({
+          user: currentUser.name,
+          action: "approved task request",
+          target: createdTask.title,
+        });
+        appendAudit({
+          user: currentUser.name,
+          action: "Approved task request",
+          target: createdTask.title,
+          category: "Approval",
+          team: createdTask.team,
+        });
+      }
       if (updatedApproval.projectId) {
         const projectDecision =
           status === "Approved"
@@ -1151,7 +1226,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         team: updatedApproval.team,
       });
     },
-    [addCalendarEvent, appendAudit, currentUser.name, decideProjectApproval, decideTaskApproval, pushActivity]
+    [addCalendarEvent, appendAudit, buildTaskRecord, currentUser.name, decideProjectApproval, decideTaskApproval, pushActivity]
   );
 
   const hideApproval: DataCtx["hideApproval"] = useCallback(

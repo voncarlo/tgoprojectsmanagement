@@ -56,6 +56,11 @@ const dueLabel = (d: string) => {
 };
 
 const initials = (name: string) => name.split(" ").map((n) => n[0]).join("").slice(0, 2);
+const canMoveTaskToStatus = (task: Task, status: TaskStatus, options: { canEditTask: boolean; canMarkCompleted: boolean }) => {
+  if (!options.canEditTask) return false;
+  if (status === "Completed") return options.canMarkCompleted;
+  return true;
+};
 
 const Tasks = () => {
   const { visibleTeams, currentUser, can } = useAuth();
@@ -103,9 +108,14 @@ const Tasks = () => {
   const addQuick = (status: TaskStatus) => {
     const title = (quickAdd[status] || "").trim();
     if (!title) return;
+    if (status === "Completed" && !isManager) {
+      toast.error("Only managers, admins, and super admins can mark tasks as completed.");
+      return;
+    }
     const teamId = (activeTeams[0] as TeamId) || currentUser.team;
-    addTask({
+    const createdTask = addTask({
       title,
+      assignedBy: currentUser.name,
       assignee: currentUser.name,
       team: teamId,
       priority: "Medium",
@@ -113,6 +123,7 @@ const Tasks = () => {
       due: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10),
     });
     setQuickAdd((s) => ({ ...s, [status]: "" }));
+    toast.success(createdTask ? "Task created" : "Task request sent for approval");
   };
 
   const onDragStart = (e: React.DragEvent, id: string) => {
@@ -126,7 +137,14 @@ const Tasks = () => {
   const onDrop = (col: TaskStatus) => {
     if (dragId) {
       const t = tasks.find((x) => x.id === dragId);
-      if (t && t.status !== col) updateTask(dragId, { status: col });
+      if (t && t.status !== col) {
+        const canEditTask = can("task.edit.any") || t.assignee === currentUser.name;
+        if (!canMoveTaskToStatus(t, col, { canEditTask, canMarkCompleted: isManager })) {
+          toast.error(col === "Completed" ? "Only managers, admins, and super admins can mark tasks as completed." : "You cannot change this task status.");
+        } else {
+          updateTask(dragId, { status: col });
+        }
+      }
     }
     setDragId(null);
     setDragOverCol(null);
@@ -142,7 +160,7 @@ const Tasks = () => {
     <div className="space-y-6">
       <PageHeader
         title="Tasks"
-        description="Plan, prioritise, and track work across boards, lists, and timelines. Staff-created tasks require manager, admin, or super admin approval before completion."
+        description="Plan, prioritise, and track work across boards, lists, and timelines. Staff task requests stay in Approvals until a manager, admin, or super admin approves them."
         actions={
           <Button onClick={() => setDialogOpen(true)} className="gradient-primary text-primary-foreground gap-1.5">
             <Plus className="h-4 w-4" /> New task
@@ -421,6 +439,7 @@ const Tasks = () => {
             const team = teams.find((x) => x.id === open.team)!;
             const overdue = isOverdue(open);
             const canEditTask = can("task.edit.any") || open.assignee === currentUser.name;
+            const canMarkCompleted = isManager;
             return (
               <div className="space-y-5">
                 <SheetHeader className="text-left space-y-2">
@@ -446,6 +465,12 @@ const Tasks = () => {
                 </SheetHeader>
 
                 <div className="grid grid-cols-2 gap-3">
+                  <DetailRow label="Assigned by">
+                    <div className="flex items-center gap-2">
+                      <Avatar className="h-6 w-6"><AvatarFallback className="text-[9px] bg-primary/10 text-primary">{initials(open.assignedBy ?? "NA")}</AvatarFallback></Avatar>
+                      <span className="text-xs">{open.assignedBy ?? "Not specified"}</span>
+                    </div>
+                  </DetailRow>
                   <DetailRow label="Assignee">
                     <div className="flex items-center gap-2">
                       <Avatar className="h-6 w-6"><AvatarFallback className="text-[9px] bg-primary/10 text-primary">{initials(open.assignee)}</AvatarFallback></Avatar>
@@ -466,11 +491,15 @@ const Tasks = () => {
                     {STATUSES.map((s) => (
                       <button
                         key={s}
-                        disabled={!canEditTask}
-                        onClick={() => { updateTask(open.id, { status: s }); setOpen({ ...open, status: s }); }}
+                        disabled={!canMoveTaskToStatus(open, s, { canEditTask, canMarkCompleted })}
+                        onClick={() => {
+                          if (!canMoveTaskToStatus(open, s, { canEditTask, canMarkCompleted })) return;
+                          updateTask(open.id, { status: s });
+                          setOpen({ ...open, status: s });
+                        }}
                         className={cn("h-9 rounded-lg text-xs font-medium border flex items-center justify-center gap-1.5 transition-smooth",
                           open.status === s ? "border-primary bg-primary/5 text-foreground" : "border-border text-muted-foreground hover:border-border hover:bg-muted/50",
-                          !canEditTask && "opacity-50 cursor-not-allowed")}
+                          !canMoveTaskToStatus(open, s, { canEditTask, canMarkCompleted }) && "opacity-50 cursor-not-allowed")}
                       >
                         <span className={cn("h-1.5 w-1.5 rounded-full", statusDot[s])} />
                         {s}
@@ -494,43 +523,6 @@ const Tasks = () => {
                         {p}
                       </button>
                     ))}
-                  </div>
-                </div>
-
-                <Separator />
-
-                <div>
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-2">Subtasks</p>
-                  <div className="space-y-2">
-                    {(open.subtasks?.length ?? 0) > 0 ? (
-                      open.subtasks!.map((subtask) => (
-                        <button
-                          key={subtask.id}
-                          type="button"
-                          disabled={!canEditTask}
-                          onClick={() => {
-                            const nextSubtasks = (open.subtasks ?? []).map((item) =>
-                              item.id === subtask.id ? { ...item, done: !item.done } : item
-                            );
-                            updateTask(open.id, { subtasks: nextSubtasks });
-                            setOpen({ ...open, subtasks: nextSubtasks });
-                          }}
-                          className={cn(
-                            "flex w-full items-center gap-2 rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-left text-xs transition-smooth",
-                            canEditTask ? "hover:bg-muted/40" : "opacity-60 cursor-not-allowed"
-                          )}
-                        >
-                          {subtask.done
-                            ? <CheckCircle2 className="h-3.5 w-3.5 text-success shrink-0" />
-                            : <div className="h-3.5 w-3.5 rounded-full border border-muted-foreground/40 shrink-0" />}
-                          <span className={cn(subtask.done && "line-through text-muted-foreground")}>{subtask.title}</span>
-                        </button>
-                      ))
-                    ) : (
-                      <div className="rounded-lg border border-dashed border-border px-3 py-3 text-xs text-muted-foreground">
-                        No subtasks yet.
-                      </div>
-                    )}
                   </div>
                 </div>
 
@@ -644,7 +636,7 @@ const ApprovalPanel = ({
           <div>
             <p className="text-sm font-medium leading-tight">Approval workflow</p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Staff-created tasks can be approved by any manager, admin, or super admin.
+              Task approvals can be reviewed by any manager, admin, or super admin.
             </p>
           </div>
         </div>
@@ -709,7 +701,7 @@ const ApprovalPanel = ({
         ) : (
           <div className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2.5 text-xs text-muted-foreground">
             <ShieldAlert className="h-3.5 w-3.5 text-primary" />
-            This task requires approval. When the assignee marks it complete it will be sent to the approval queue.
+            This task requires approval before it can be finalized.
           </div>
         )}
       </div>

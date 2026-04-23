@@ -7,6 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { teams, type ModuleKey, type Role } from "@/data/mock";
 import { useAuth } from "@/auth/AuthContext";
 import { ShieldCheck } from "lucide-react";
@@ -43,6 +44,32 @@ const ROLE_DEFAULTS: Record<Role, ModuleKey[]> = {
   "Staff":       ["dashboard", "tasks", "projects", "chat", "notes", "teams"],
 };
 
+const cropImageToSquare = (src: string, zoom: number, offsetX: number, offsetY: number, outputSize = 256) =>
+  new Promise<string>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = outputSize;
+      canvas.height = outputSize;
+      const context = canvas.getContext("2d");
+      if (!context) return reject(new Error("Canvas is not available."));
+
+      const baseScale = Math.max(outputSize / image.naturalWidth, outputSize / image.naturalHeight);
+      const scaledWidth = image.naturalWidth * baseScale * zoom;
+      const scaledHeight = image.naturalHeight * baseScale * zoom;
+      const maxShiftX = Math.max(0, (scaledWidth - outputSize) / 2);
+      const maxShiftY = Math.max(0, (scaledHeight - outputSize) / 2);
+      const drawX = (outputSize - scaledWidth) / 2 + (offsetX / 100) * maxShiftX;
+      const drawY = (outputSize - scaledHeight) / 2 + (offsetY / 100) * maxShiftY;
+
+      context.clearRect(0, 0, outputSize, outputSize);
+      context.drawImage(image, drawX, drawY, scaledWidth, scaledHeight);
+      resolve(canvas.toDataURL("image/png"));
+    };
+    image.onerror = () => reject(new Error("Could not process that image."));
+    image.src = src;
+  });
+
 const Settings = () => {
   const { currentUser, updateCurrentUser, isAdmin, isSuperAdmin, userList, updatePassword: savePassword } = useAuth();
 
@@ -50,6 +77,12 @@ const Settings = () => {
   const [email, setEmail] = useState(currentUser.email);
   const [avatarUrl, setAvatarUrl] = useState(currentUser.avatarUrl ?? "");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [cropOpen, setCropOpen] = useState(false);
+  const [pendingAvatarUrl, setPendingAvatarUrl] = useState("");
+  const [avatarZoom, setAvatarZoom] = useState(1);
+  const [avatarOffsetX, setAvatarOffsetX] = useState(0);
+  const [avatarOffsetY, setAvatarOffsetY] = useState(0);
+  const [savingAvatar, setSavingAvatar] = useState(false);
 
   const [permMatrix, setPermMatrix] = useState<Record<Role, Record<ModuleKey, boolean>>>(() => {
     const obj = {} as Record<Role, Record<ModuleKey, boolean>>;
@@ -88,14 +121,35 @@ const Settings = () => {
     const file = event.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) return toast.error("Please choose an image file.");
+    if (file.size > 2 * 1024 * 1024) return toast.error("Please choose an image under 2MB.");
     const reader = new FileReader();
     reader.onload = () => {
       const nextUrl = typeof reader.result === "string" ? reader.result : "";
       if (!nextUrl) return toast.error("Could not read that image.");
-      setAvatarUrl(nextUrl);
-      toast.success("Profile picture updated");
+      setPendingAvatarUrl(nextUrl);
+      setAvatarZoom(1);
+      setAvatarOffsetX(0);
+      setAvatarOffsetY(0);
+      setCropOpen(true);
     };
     reader.readAsDataURL(file);
+    event.target.value = "";
+  };
+
+  const applyAvatarCrop = async () => {
+    if (!pendingAvatarUrl) return;
+    setSavingAvatar(true);
+    try {
+      const croppedAvatarUrl = await cropImageToSquare(pendingAvatarUrl, avatarZoom, avatarOffsetX, avatarOffsetY);
+      setAvatarUrl(croppedAvatarUrl);
+      setCropOpen(false);
+      setPendingAvatarUrl("");
+      toast.success("Profile picture updated");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not update that photo.");
+    } finally {
+      setSavingAvatar(false);
+    }
   };
 
   const updatePassword = () => {
@@ -122,7 +176,7 @@ const Settings = () => {
                 <Button size="sm" variant="ghost" onClick={() => { setAvatarUrl(""); toast.success("Profile picture removed"); }}>Remove photo</Button>
               </div>
               <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={onAvatarSelect} />
-              <p className="text-xs text-muted-foreground mt-1">JPG or PNG, up to 2MB.</p>
+              <p className="text-xs text-muted-foreground mt-1">JPG or PNG, up to 2MB. You can zoom and reposition before saving.</p>
             </div>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
@@ -262,6 +316,82 @@ const Settings = () => {
           </div>
         </Section>
       </div>
+
+      <Dialog open={cropOpen} onOpenChange={(open) => {
+        if (!savingAvatar) {
+          setCropOpen(open);
+          if (!open) setPendingAvatarUrl("");
+        }
+      }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Adjust profile photo</DialogTitle>
+            <DialogDescription>Zoom and reposition your photo before saving it to the profile circle.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-5">
+            <div className="flex justify-center">
+              <div className="relative h-64 w-64 overflow-hidden rounded-full border border-border bg-muted">
+                {pendingAvatarUrl ? (
+                  <img
+                    src={pendingAvatarUrl}
+                    alt="Profile crop preview"
+                    className="absolute inset-0 h-full w-full select-none object-cover"
+                    style={{
+                      transform: `translate(${avatarOffsetX}%, ${avatarOffsetY}%) scale(${avatarZoom})`,
+                      transformOrigin: "center",
+                    }}
+                  />
+                ) : null}
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <Label htmlFor="avatar-zoom">Zoom</Label>
+                <Input
+                  id="avatar-zoom"
+                  type="range"
+                  min="1"
+                  max="2.5"
+                  step="0.01"
+                  value={avatarZoom}
+                  onChange={(event) => setAvatarZoom(Number(event.target.value))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="avatar-offset-x">Move left / right</Label>
+                <Input
+                  id="avatar-offset-x"
+                  type="range"
+                  min="-100"
+                  max="100"
+                  step="1"
+                  value={avatarOffsetX}
+                  onChange={(event) => setAvatarOffsetX(Number(event.target.value))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="avatar-offset-y">Move up / down</Label>
+                <Input
+                  id="avatar-offset-y"
+                  type="range"
+                  min="-100"
+                  max="100"
+                  step="1"
+                  value={avatarOffsetY}
+                  onChange={(event) => setAvatarOffsetY(Number(event.target.value))}
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setCropOpen(false); setPendingAvatarUrl(""); }} disabled={savingAvatar}>Cancel</Button>
+            <Button className="gradient-primary text-primary-foreground" onClick={applyAvatarCrop} disabled={savingAvatar}>
+              {savingAvatar ? "Saving..." : "Use photo"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -82,7 +82,7 @@ type SidebarInnerProps = {
 const SidebarInner = ({ collapsed, setCollapsed, onNavigate, hideCollapseToggle }: SidebarInnerProps) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { canAccess, can, isAdmin } = useAuth();
+  const { canAccess, can, isAdmin, signOut } = useAuth();
   const { unreadChatCount } = useData();
 
   const visibleSections = useMemo(
@@ -262,7 +262,7 @@ const SidebarInner = ({ collapsed, setCollapsed, onNavigate, hideCollapseToggle 
             </button>
           )}
           <button
-            onClick={() => { onNavigate?.(); toast.success("Signed out"); navigate("/login"); }}
+            onClick={() => { signOut(); onNavigate?.(); toast.success("Signed out"); navigate("/login"); }}
             className={cn(
               "w-full flex items-center gap-3 rounded-lg py-2.5 text-sm font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-smooth",
               collapsed ? "px-0 justify-center" : "px-3"
