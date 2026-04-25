@@ -95,7 +95,7 @@ export const Topbar = () => {
           <h1 className="truncate text-base font-semibold tracking-tight text-foreground sm:text-lg">{meta.title}</h1>
           <p className="hidden text-xs text-muted-foreground sm:block">
             {meta.subtitle}
-            {activeWorkspace ? ` Active workspace: ${activeWorkspace.name}.` : ""}
+            {activeWorkspace ? ` Active workspace: ${activeWorkspace.isCompanyWide ? activeWorkspace.name : activeWorkspace.shortName}.` : ""}
           </p>
         </div>
         <div className="hidden items-center gap-2 xl:flex">

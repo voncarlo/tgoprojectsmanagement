@@ -200,7 +200,7 @@ const SidebarInner = ({ collapsed, setCollapsed, onNavigate, hideCollapseToggle 
           </div>
         )}
 
-        <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-1.5">
+        <nav className="flex-1 overflow-y-auto px-3 py-3 pr-2 space-y-1.5">
           {/* Dashboard — always top-level */}
           {dashboardVisible && <div className="space-y-0.5">{renderItem(dashboardItem)}</div>}
 

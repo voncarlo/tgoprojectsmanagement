@@ -278,7 +278,7 @@ const Users = () => {
 
       {/* Edit / Add dialog */}
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-h-[92vh] max-w-2xl overflow-hidden">
           {editing && (
             <>
               <DialogHeader>
@@ -289,8 +289,7 @@ const Users = () => {
                     : "Manage profile, role, departments and module access."}
                 </DialogDescription>
               </DialogHeader>
-
-              <div className="grid gap-4 py-2 md:grid-cols-2">
+              <div className="grid max-h-[72vh] gap-4 overflow-y-auto py-2 pr-2 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Full name</Label>
                   <Input value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} />
@@ -365,7 +364,7 @@ const Users = () => {
 
                 <div className="space-y-2 md:col-span-2">
                   <Label>Workspace access</Label>
-                  <div className="grid gap-2 rounded-lg border border-border p-3">
+                  <div className="grid max-h-72 gap-2 overflow-y-auto rounded-lg border border-border p-3 pr-2">
                     {workspaces.map((workspace) => {
                       const checked = (editing.workspaceIds ?? []).includes(workspace.id);
                       const companyLevelUser = isCompanyLevelRole(editing.role);
