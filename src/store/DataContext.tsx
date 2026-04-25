@@ -163,6 +163,7 @@ interface PersistedDataState {
   deletedDocumentIds: string[];
   automations: AutomationRule[];
   auditLog: AuditEntry[];
+  deletedAuditLogIds: string[];
   calendarEvents: CalendarEvent[];
   deletedCalendarEventIds: string[];
   recycleBin: RecycleBinItem[];
@@ -283,6 +284,7 @@ const mergePersistedState = (remoteState: PersistedDataState | null, localState:
   const deletedProjectIds = [...new Set([...(remoteState.deletedProjectIds ?? []), ...(localState.deletedProjectIds ?? [])])];
   const deletedApprovalIds = [...new Set([...(remoteState.deletedApprovalIds ?? []), ...(localState.deletedApprovalIds ?? [])])];
   const deletedDocumentIds = [...new Set([...(remoteState.deletedDocumentIds ?? []), ...(localState.deletedDocumentIds ?? [])])];
+  const deletedAuditLogIds = [...new Set([...(remoteState.deletedAuditLogIds ?? []), ...(localState.deletedAuditLogIds ?? [])])];
   const deletedCalendarEventIds = [...new Set([...(remoteState.deletedCalendarEventIds ?? []), ...(localState.deletedCalendarEventIds ?? [])])];
   return {
     tasks: mergeRecordCollections(remoteState.tasks, localState.tasks).filter((task) => !deletedTaskIds.includes(task.id)),
@@ -300,7 +302,8 @@ const mergePersistedState = (remoteState: PersistedDataState | null, localState:
     documents: mergeRecordCollections(remoteState.documents, localState.documents).filter((document) => !deletedDocumentIds.includes(document.id)),
     deletedDocumentIds,
     automations: mergeRecordCollections(remoteState.automations, localState.automations),
-    auditLog: mergeRecordCollections(remoteState.auditLog, localState.auditLog),
+    auditLog: mergeRecordCollections(remoteState.auditLog, localState.auditLog).filter((entry) => !deletedAuditLogIds.includes(entry.id)),
+    deletedAuditLogIds,
     calendarEvents: mergeRecordCollections(remoteState.calendarEvents, localState.calendarEvents).filter(
       (event) => !deletedCalendarEventIds.includes(event.id)
     ),
@@ -327,6 +330,7 @@ const defaultState: PersistedDataState = {
   deletedDocumentIds: [],
   automations: seedAutomations,
   auditLog: seedAuditLog,
+  deletedAuditLogIds: [],
   calendarEvents: seedCalendarEvents,
   deletedCalendarEventIds: [],
   recycleBin: [],
@@ -346,6 +350,7 @@ const loadState = (): PersistedDataState => {
     const deletedProjectIds = parsed.deletedProjectIds ?? defaultState.deletedProjectIds;
     const deletedApprovalIds = parsed.deletedApprovalIds ?? defaultState.deletedApprovalIds;
     const deletedDocumentIds = parsed.deletedDocumentIds ?? defaultState.deletedDocumentIds;
+    const deletedAuditLogIds = parsed.deletedAuditLogIds ?? defaultState.deletedAuditLogIds;
     const deletedCalendarEventIds = parsed.deletedCalendarEventIds ?? defaultState.deletedCalendarEventIds;
     return {
       tasks: (parsed.tasks?.length ? parsed.tasks : defaultState.tasks).filter((task) => !deletedTaskIds.includes(task.id)),
@@ -363,7 +368,8 @@ const loadState = (): PersistedDataState => {
       documents: (parsed.documents?.length ? parsed.documents : defaultState.documents).filter((document) => !deletedDocumentIds.includes(document.id)),
       deletedDocumentIds,
       automations: parsed.automations?.length ? parsed.automations : defaultState.automations,
-      auditLog: parsed.auditLog?.length ? parsed.auditLog : defaultState.auditLog,
+      auditLog: (parsed.auditLog?.length ? parsed.auditLog : defaultState.auditLog).filter((entry) => !deletedAuditLogIds.includes(entry.id)),
+      deletedAuditLogIds,
       calendarEvents: (parsed.calendarEvents?.length ? parsed.calendarEvents : defaultState.calendarEvents).filter(
         (event) => !deletedCalendarEventIds.includes(event.id)
       ),
@@ -548,6 +554,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [deletedDocumentIds, setDeletedDocumentIds] = useState<string[]>(initialState.deletedDocumentIds ?? []);
   const [automations, setAutomations] = useState<AutomationRule[]>(initialState.automations);
   const [auditLog, setAuditLog] = useState<AuditEntry[]>(initialState.auditLog);
+  const [deletedAuditLogIds, setDeletedAuditLogIds] = useState<string[]>(initialState.deletedAuditLogIds ?? []);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>(initialState.calendarEvents);
   const [deletedCalendarEventIds, setDeletedCalendarEventIds] = useState<string[]>(initialState.deletedCalendarEventIds ?? []);
   const [recycleBin, setRecycleBin] = useState<RecycleBinItem[]>(initialState.recycleBin);
@@ -569,6 +576,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       deletedDocumentIds,
       automations,
       auditLog,
+      deletedAuditLogIds,
       calendarEvents,
       deletedCalendarEventIds,
       recycleBin,
@@ -577,7 +585,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       chatReadAtByUser,
       personalNotes,
     }),
-    [approvals, auditLog, automations, calendarEvents, chats, chatReadAtByUser, deletedApprovalIds, deletedCalendarEventIds, deletedDocumentIds, deletedProjectIds, deletedTaskIds, documents, notifications, personalNotes, projects, recycleBin, taskComments, tasks]
+    [approvals, auditLog, automations, calendarEvents, chats, chatReadAtByUser, deletedApprovalIds, deletedAuditLogIds, deletedCalendarEventIds, deletedDocumentIds, deletedProjectIds, deletedTaskIds, documents, notifications, personalNotes, projects, recycleBin, taskComments, tasks]
   );
   const applyRemoteState = useCallback((remoteState: PersistedDataState, revision = 0) => {
     skipNextServerSaveRef.current = true;
@@ -599,7 +607,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     setDocuments((remoteState.documents ?? defaultState.documents).filter((document) => !(remoteState.deletedDocumentIds ?? []).includes(document.id)));
     setDeletedDocumentIds(remoteState.deletedDocumentIds ?? []);
     setAutomations(remoteState.automations ?? defaultState.automations);
-    setAuditLog(remoteState.auditLog ?? defaultState.auditLog);
+    setAuditLog((remoteState.auditLog ?? defaultState.auditLog).filter((entry) => !(remoteState.deletedAuditLogIds ?? []).includes(entry.id)));
+    setDeletedAuditLogIds(remoteState.deletedAuditLogIds ?? []);
     setCalendarEvents((remoteState.calendarEvents ?? defaultState.calendarEvents).filter((event) => !(remoteState.deletedCalendarEventIds ?? []).includes(event.id)));
     setDeletedCalendarEventIds(remoteState.deletedCalendarEventIds ?? []);
     setRecycleBin(remoteState.recycleBin ?? []);
@@ -822,10 +831,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   );
 
   const appendAudit = useCallback((entry: Omit<AuditEntry, "id" | "time"> & { time?: string }) => {
-    setAuditLog((items) => [
-      { ...entry, id: id("al"), time: entry.time ?? nowLabel() },
-      ...items,
-    ].slice(0, 100));
+    const nextEntry = { ...entry, id: id("al"), time: entry.time ?? nowLabel() };
+    setDeletedAuditLogIds((items) => items.filter((auditId) => auditId !== nextEntry.id));
+    setAuditLog((items) => [nextEntry, ...items].slice(0, 100));
   }, []);
 
   const logNotificationDispatch = useCallback(
@@ -2311,8 +2319,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   }, [approvals]);
 
   const clearAuditLog: DataCtx["clearAuditLog"] = useCallback(() => {
+    setDeletedAuditLogIds((items) => [...new Set([...items, ...auditLog.map((entry) => entry.id)])]);
     setAuditLog([]);
-  }, []);
+  }, [auditLog]);
 
   const markChatsRead: DataCtx["markChatsRead"] = useCallback(
     (partnerId) => {

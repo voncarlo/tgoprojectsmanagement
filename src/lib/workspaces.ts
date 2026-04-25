@@ -66,7 +66,7 @@ export const DEFAULT_WORKSPACES: Workspace[] = [
   {
     id: COMPANY_WORKSPACE_ID,
     name: "Torero Global Outsourcing",
-    shortName: "Company-wide",
+    shortName: "Torero Global Outsourcing",
     description: "Company-wide workspace with approved visibility across all departments.",
     kind: "company",
     color: "221 83% 53%",
