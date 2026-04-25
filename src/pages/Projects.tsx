@@ -48,7 +48,7 @@ const canManageProjectWork = (project: Project, userName: string, isManager: boo
 const sortProjectSubtasks = (subtasks: Subtask[]) => [...subtasks].sort((left, right) => Number(left.done) - Number(right.done));
 
 const Projects = () => {
-  const { visibleTeams, currentUser, isManager, can, userList } = useAuth();
+  const { visibleTeams, currentUser, isManager, can, userList, canDecideTeamApprovals, hasAssignedTeamLead, isAdmin } = useAuth();
   const { allProjects, removeProject, updateProject, decideProjectApproval } = useData();
   const [searchParams, setSearchParams] = useSearchParams();
   const teamsVisible = teams.filter((team) => visibleTeams.includes(team.id));
@@ -264,7 +264,7 @@ const Projects = () => {
             const canEditSubtasks = canManageProjectWork(selectedProject, currentUser.name, isManager);
             const canOpenFullProject = canFullyAccessProject(selectedProject, currentUser, isManager);
             const members = getProjectMembers(selectedProject);
-            const canDecide = isManager;
+            const canDecide = canDecideTeamApprovals(selectedProject.team);
             const showApprovalActions = canDecide && selectedProject.approvalStatus === "Pending Approval";
             const coOwnerCandidates = userList.filter((user) =>
               user.name !== selectedProject.owner && !(selectedProject.coOwners ?? []).includes(user.name)
@@ -463,6 +463,11 @@ const Projects = () => {
                     </div>
 
                     <div className="p-4 space-y-4">
+                      {!hasAssignedTeamLead(selectedProject.team) && isAdmin && (
+                        <div className="rounded-lg border border-warning/20 bg-warning/10 px-3 py-2.5 text-xs text-warning">
+                          No Manager or Team Lead is assigned to this department yet. Admins and Super Admins can still approve this project.
+                        </div>
+                      )}
                       {selectedProject.approvalHistory && selectedProject.approvalHistory.length > 0 && (
                         <div>
                           <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-2">History</p>
@@ -506,7 +511,7 @@ const Projects = () => {
                       ) : selectedProject.approvalStatus === "Pending Approval" ? (
                         <div className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2.5 text-xs text-muted-foreground">
                           <Lock className="h-3.5 w-3.5" />
-                          Awaiting approval from any manager, admin, or super admin.
+                          Awaiting approval from the assigned Manager or Team Lead, plus Admins and Super Admins.
                         </div>
                       ) : (
                         <div className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2.5 text-xs text-muted-foreground">

@@ -34,8 +34,19 @@ import Sales from "./pages/departments/Sales";
 import Payroll from "./pages/departments/Payroll";
 import Bookkeeping from "./pages/departments/Bookkeeping";
 import Clients from "./pages/departments/Clients";
+import { useAuth } from "./auth/AuthContext";
 
 const queryClient = new QueryClient();
+
+const ProtectedApp = () => {
+  const { isAuthenticated } = useAuth();
+  return isAuthenticated ? <AppLayout /> : <Navigate to="/login" replace />;
+};
+
+const LoginRoute = () => {
+  const { isAuthenticated } = useAuth();
+  return isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />;
+};
 
 const App = () => (
   <ErrorBoundary>
@@ -49,8 +60,8 @@ const App = () => (
               <BrowserRouter>
                 <Routes>
                   <Route path="/" element={<Navigate to="/login" replace />} />
-                  <Route path="/login" element={<Login />} />
-                  <Route element={<AppLayout />}>
+                  <Route path="/login" element={<LoginRoute />} />
+                  <Route element={<ProtectedApp />}>
                     <Route path="/dashboard" element={<Dashboard />} />
                     <Route path="/tasks" element={<Tasks />} />
                     <Route path="/projects" element={<Projects />} />

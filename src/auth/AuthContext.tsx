@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { users as seedUsers, type User, type ModuleKey, type TeamId, type NotificationSettings } from "@/data/mock";
+import { users as seedUsers, teams, type User, type ModuleKey, type TeamId, type NotificationSettings } from "@/data/mock";
 import { ROLE_CAPABILITIES, ROLE_MODULES, ADMIN_ONLY_MODULES, DEPARTMENT_MODULE_TO_TEAM, type Capability } from "./permissions";
 import {
   COMPANY_WORKSPACE_ID,
@@ -13,6 +13,8 @@ import {
 
 interface AuthCtx {
   currentUser: User;
+  isAuthenticated: boolean;
+  teamLeadIdsByTeam: Record<TeamId, string[]>;
   setCurrentUser: (u: User) => void;
   updateCurrentUser: (patch: Partial<User>) => void;
   userList: User[];
@@ -42,6 +44,13 @@ interface AuthCtx {
   canAccessWorkspace: (workspaceId: string) => boolean;
   upsertWorkspace: (workspace: Workspace) => void;
   deleteWorkspace: (workspaceId: string) => void;
+  setTeamLeadIds: (teamId: TeamId, userIds: string[]) => { ok: boolean; message?: string };
+  getTeamLeadIds: (teamId: TeamId) => string[];
+  getTeamLeadUsers: (teamId: TeamId) => User[];
+  getTeamLeadNames: (teamId: TeamId) => string[];
+  getTeamApprovalRecipients: (teamId: TeamId) => User[];
+  canDecideTeamApprovals: (teamId: TeamId) => boolean;
+  hasAssignedTeamLead: (teamId: TeamId) => boolean;
 }
 
 interface PersistedAuthState {
@@ -51,6 +60,7 @@ interface PersistedAuthState {
   sessionLogs: SessionLogEntry[];
   deletedUsers?: DeletedUserRecord[];
   workspaces: Workspace[];
+  teamLeadIdsByTeam?: Record<TeamId, string[]>;
 }
 
 interface DeletedUserRecord {
@@ -84,9 +94,9 @@ const saveServerState = async (state: PersistedAuthState) => {
 };
 
 const STORAGE_KEY = "tgo.auth";
-const CURRENT_USER_STORAGE_KEY = "tgo.auth.currentUserId";
+const CURRENT_USER_SESSION_STORAGE_KEY = "tgo.auth.currentUserId";
 const REMEMBER_EMAIL_KEY = "tgo.auth.rememberedEmail";
-const ACTIVE_WORKSPACE_STORAGE_KEY = "tgo.auth.activeWorkspaceByUser";
+const ACTIVE_WORKSPACE_SESSION_STORAGE_KEY = "tgo.auth.activeWorkspaceByUser";
 const STORAGE_VERSION = 9;
 const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   enabled: true,
@@ -105,6 +115,19 @@ const defaultPasswords = seedUsers.reduce<Record<string, string>>((acc, user) =>
   acc[user.id] = user.email.toLowerCase() === "von.asinas@tgocorp.com" ? "Von@4213" : "";
   return acc;
 }, {});
+const DEFAULT_TEAM_LEAD_IDS_BY_TEAM = Object.fromEntries(
+  teams.map((team) => [team.id, seedUsers.filter((user) => user.name === team.lead).map((user) => user.id)])
+) as Record<TeamId, string[]>;
+const normalizeTeamLeadIdsByTeam = (value: Partial<Record<TeamId, string[]>> | undefined, users: User[]) => {
+  const validUserIds = new Set(users.map((user) => user.id));
+  return Object.fromEntries(
+    teams.map((team) => {
+      const source = value?.[team.id] ?? DEFAULT_TEAM_LEAD_IDS_BY_TEAM[team.id] ?? [];
+      const normalized = [...new Set(source.filter((userId) => validUserIds.has(userId)))];
+      return [team.id, normalized];
+    })
+  ) as Record<TeamId, string[]>;
+};
 
 const resolveWorkspaceIds = (user: User, workspaces: Workspace[]) =>
   unique(getDefaultWorkspaceIdsForUser(user, workspaces));
@@ -152,8 +175,6 @@ const mergeUsers = (savedUsers: User[] | undefined, workspaces: Workspace[]): Us
   return normalizedSaved.length > 0 ? normalizedSaved : seedUsers.map((user) => normalizeUser(user, workspaces));
 };
 
-const getDefaultCurrentUserId = (users: User[]) => users[0]?.id ?? seedUsers[0].id;
-
 const chooseDefaultWorkspaceId = (user: User | undefined, accessibleWorkspaces: Workspace[]) => {
   if (!user || accessibleWorkspaces.length === 0) return "";
   if (isCompanyLevelRole(user.role)) return COMPANY_WORKSPACE_ID;
@@ -166,15 +187,15 @@ const chooseDefaultWorkspaceId = (user: User | undefined, accessibleWorkspaces: 
 };
 
 const loadLocalCurrentUserId = (users: User[]) => {
-  if (typeof window === "undefined") return getDefaultCurrentUserId(users);
-  const savedUserId = window.localStorage.getItem(CURRENT_USER_STORAGE_KEY);
-  return users.some((user) => user.id === savedUserId) ? (savedUserId as string) : getDefaultCurrentUserId(users);
+  if (typeof window === "undefined") return "";
+  const savedUserId = window.sessionStorage.getItem(CURRENT_USER_SESSION_STORAGE_KEY);
+  return users.some((user) => user.id === savedUserId) ? (savedUserId as string) : "";
 };
 
 const loadLocalActiveWorkspaceMap = () => {
   if (typeof window === "undefined") return {} as Record<string, string>;
   try {
-    return JSON.parse(window.localStorage.getItem(ACTIVE_WORKSPACE_STORAGE_KEY) ?? "{}") as Record<string, string>;
+    return JSON.parse(window.sessionStorage.getItem(ACTIVE_WORKSPACE_SESSION_STORAGE_KEY) ?? "{}") as Record<string, string>;
   } catch {
     return {};
   }
@@ -187,6 +208,7 @@ const defaultAuthState: PersistedAuthState = {
   sessionLogs: [],
   deletedUsers: [],
   workspaces: DEFAULT_WORKSPACES,
+  teamLeadIdsByTeam: DEFAULT_TEAM_LEAD_IDS_BY_TEAM,
 };
 
 const loadAuthState = (): PersistedAuthState => {
@@ -203,6 +225,7 @@ const loadAuthState = (): PersistedAuthState => {
       sessionLogs: parsed.sessionLogs ?? defaultAuthState.sessionLogs,
       deletedUsers: parsed.deletedUsers ?? defaultAuthState.deletedUsers,
       workspaces,
+      teamLeadIdsByTeam: normalizeTeamLeadIdsByTeam(parsed.teamLeadIdsByTeam, mergeUsers(parsed.userList, workspaces)),
     };
   } catch {
     return defaultAuthState;
@@ -232,6 +255,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [passwords, setPasswords] = useState<Record<string, string>>(initialState.passwords);
   const [sessionLogs, setSessionLogs] = useState<SessionLogEntry[]>(initialState.sessionLogs);
   const [deletedUsers, setDeletedUsers] = useState<DeletedUserRecord[]>(initialState.deletedUsers ?? []);
+  const [teamLeadIdsByTeam, setTeamLeadIdsByTeam] = useState<Record<TeamId, string[]>>(
+    normalizeTeamLeadIdsByTeam(initialState.teamLeadIdsByTeam, initialState.userList)
+  );
   const [serverHydrated, setServerHydrated] = useState(false);
   const [rememberedEmail, setRememberedEmail] = useState<string>(() => {
     if (typeof window === "undefined") return "";
@@ -258,13 +284,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [workspaces]);
 
   useEffect(() => {
+    setTeamLeadIdsByTeam((prev) => normalizeTeamLeadIdsByTeam(prev, userList));
+  }, [userList]);
+
+  useEffect(() => {
+    if (!currentUserId) return;
     const hasCurrentUser = userList.some((user) => user.id === currentUserId);
-    if (!hasCurrentUser) setCurrentUserId(getDefaultCurrentUserId(userList));
+    if (!hasCurrentUser) setCurrentUserId("");
   }, [currentUserId, userList]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    window.localStorage.setItem(CURRENT_USER_STORAGE_KEY, currentUserId);
+    if (currentUserId) {
+      window.sessionStorage.setItem(CURRENT_USER_SESSION_STORAGE_KEY, currentUserId);
+      return;
+    }
+    window.sessionStorage.removeItem(CURRENT_USER_SESSION_STORAGE_KEY);
   }, [currentUserId]);
 
   useEffect(() => {
@@ -278,13 +313,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         sessionLogs,
         deletedUsers,
         workspaces,
+        teamLeadIdsByTeam,
       } satisfies PersistedAuthState)
     );
-  }, [deletedUsers, passwords, sessionLogs, userList, workspaces]);
+  }, [deletedUsers, passwords, sessionLogs, teamLeadIdsByTeam, userList, workspaces]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    window.localStorage.setItem(ACTIVE_WORKSPACE_STORAGE_KEY, JSON.stringify(activeWorkspaceByUser));
+    window.sessionStorage.setItem(ACTIVE_WORKSPACE_SESSION_STORAGE_KEY, JSON.stringify(activeWorkspaceByUser));
   }, [activeWorkspaceByUser]);
 
   useEffect(() => {
@@ -300,6 +336,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setPasswords({ ...defaultPasswords, ...(remoteState.passwords ?? {}) });
         setSessionLogs(remoteState.sessionLogs ?? defaultAuthState.sessionLogs);
         setDeletedUsers(remoteState.deletedUsers ?? defaultAuthState.deletedUsers ?? []);
+        setTeamLeadIdsByTeam(normalizeTeamLeadIdsByTeam(remoteState.teamLeadIdsByTeam, mergeUsers(remoteState.userList, nextWorkspaces)));
       } catch {
         // Fallback to local storage state when the API is unavailable.
       } finally {
@@ -322,8 +359,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       sessionLogs,
       deletedUsers,
       workspaces,
+      teamLeadIdsByTeam,
     });
-  }, [deletedUsers, passwords, serverHydrated, sessionLogs, userList, workspaces]);
+  }, [deletedUsers, passwords, serverHydrated, sessionLogs, teamLeadIdsByTeam, userList, workspaces]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -334,27 +372,91 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     window.localStorage.removeItem(REMEMBER_EMAIL_KEY);
   }, [rememberedEmail]);
 
-  const currentUser = userList.find((user) => user.id === currentUserId) ?? userList[0] ?? defaultAuthState.userList[0];
+  const authenticatedUser = userList.find((user) => user.id === currentUserId) ?? null;
+  const currentUser = authenticatedUser ?? {
+    id: "",
+    name: "Guest",
+    email: "",
+    role: "Staff" as const,
+    team: "projects" as const,
+    teams: [],
+    modules: [],
+    status: "Inactive" as const,
+    initials: "G",
+    workspaceIds: [],
+  };
+  const isAuthenticated = Boolean(authenticatedUser);
   const isSuperAdmin = currentUser.role === "Super Admin";
-  const accessibleWorkspaces = workspaces.filter((workspace) => (currentUser.workspaceIds ?? []).includes(workspace.id));
+  const isAdmin = currentUser.role === "Super Admin" || currentUser.role === "Admin";
+  const isManager = isAdmin || currentUser.role === "Manager";
+  const accessibleWorkspaces = isAuthenticated
+    ? workspaces.filter((workspace) => (currentUser.workspaceIds ?? []).includes(workspace.id))
+    : [];
   const activeWorkspaceId = activeWorkspaceByUser[currentUser.id] ?? chooseDefaultWorkspaceId(currentUser, accessibleWorkspaces);
   const activeWorkspace =
     accessibleWorkspaces.find((workspace) => workspace.id === activeWorkspaceId) ??
     accessibleWorkspaces[0] ??
     null;
-  const capabilities = ROLE_CAPABILITIES[currentUser.role] ?? [];
-  const userModules = currentUser.modules?.length ? currentUser.modules : ROLE_MODULES[currentUser.role];
-  const visibleTeams = resolveWorkspaceTeams(activeWorkspace, ALL_TEAMS);
+  const capabilities = isAuthenticated ? ROLE_CAPABILITIES[currentUser.role] ?? [] : [];
+  const userModules = isAuthenticated ? (currentUser.modules?.length ? currentUser.modules : ROLE_MODULES[currentUser.role]) : [];
+  const visibleTeams = isAuthenticated ? resolveWorkspaceTeams(activeWorkspace, ALL_TEAMS) : [];
+  const getTeamLeadIds = useCallback(
+    (teamId: TeamId) => teamLeadIdsByTeam[teamId] ?? [],
+    [teamLeadIdsByTeam]
+  );
+  const getTeamLeadUsers = useCallback(
+    (teamId: TeamId) => {
+      const leadIds = getTeamLeadIds(teamId);
+      return userList.filter((user) => leadIds.includes(user.id));
+    },
+    [getTeamLeadIds, userList]
+  );
+  const getTeamLeadNames = useCallback(
+    (teamId: TeamId) => {
+      const leadUsers = getTeamLeadUsers(teamId);
+      return leadUsers.length > 0 ? leadUsers.map((user) => user.name) : [];
+    },
+    [getTeamLeadUsers]
+  );
+  const getTeamApprovalRecipients = useCallback(
+    (teamId: TeamId) => {
+      const recipientMap = new Map<string, User>();
+      userList.forEach((user) => {
+        if (user.status !== "Active") return;
+        if (user.role === "Super Admin" || user.role === "Admin") {
+          recipientMap.set(user.id, user);
+        }
+      });
+      getTeamLeadUsers(teamId).forEach((user) => {
+        if (user.status !== "Active") return;
+        recipientMap.set(user.id, user);
+      });
+      return [...recipientMap.values()];
+    },
+    [getTeamLeadUsers, userList]
+  );
+  const canDecideTeamApprovals = useCallback(
+    (teamId: TeamId) => {
+      if (!isAuthenticated) return false;
+      if (isAdmin) return true;
+      return getTeamLeadIds(teamId).includes(currentUser.id);
+    },
+    [currentUser.id, getTeamLeadIds, isAdmin, isAuthenticated]
+  );
+  const hasAssignedTeamLead = useCallback(
+    (teamId: TeamId) => getTeamLeadIds(teamId).length > 0,
+    [getTeamLeadIds]
+  );
 
   useEffect(() => {
-    if (!currentUser?.id || accessibleWorkspaces.length === 0) return;
+    if (!isAuthenticated || !currentUser?.id || accessibleWorkspaces.length === 0) return;
     const nextWorkspaceId =
       accessibleWorkspaces.some((workspace) => workspace.id === activeWorkspaceId)
         ? activeWorkspaceId
         : chooseDefaultWorkspaceId(currentUser, accessibleWorkspaces);
     if (!nextWorkspaceId || nextWorkspaceId === activeWorkspaceByUser[currentUser.id]) return;
     setActiveWorkspaceByUser((prev) => ({ ...prev, [currentUser.id]: nextWorkspaceId }));
-  }, [accessibleWorkspaces, activeWorkspaceByUser, activeWorkspaceId, currentUser]);
+  }, [accessibleWorkspaces, activeWorkspaceByUser, activeWorkspaceId, currentUser, isAuthenticated]);
 
   const appendSessionLog = (user: User, action: SessionLogEntry["action"]) => {
     setSessionLogs((prev) => [
@@ -373,6 +475,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const setUserList = (nextUsers: User[]) => {
     const normalizedUsers = nextUsers.map((user) => normalizeUser(user, workspaces));
     setUserListState(normalizedUsers);
+    setTeamLeadIdsByTeam((prev) => normalizeTeamLeadIdsByTeam(prev, normalizedUsers));
     setDeletedUsers((prev) =>
       prev.filter(
         (deletedUser) =>
@@ -381,6 +484,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           )
       )
     );
+  };
+
+  const setTeamLeadIds = (teamId: TeamId, userIds: string[]) => {
+    if (!isAdmin) return { ok: false, message: "Only Admins and Super Admins can assign department leads." };
+    const normalizedIds = [...new Set(userIds)].filter((userId) => userList.some((user) => user.id === userId));
+    setTeamLeadIdsByTeam((prev) => ({ ...prev, [teamId]: normalizedIds }));
+    return { ok: true };
   };
 
   const upsertWorkspace = (workspace: Workspace) => {
@@ -409,6 +519,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const value = useMemo<AuthCtx>(() => ({
     currentUser,
+    isAuthenticated,
+    teamLeadIdsByTeam,
     setCurrentUser: (user) => {
       const normalized = normalizeUser(user, workspaces);
       const exists = userList.some((item) => item.id === user.id);
@@ -431,11 +543,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUserList,
     sessionLogs,
     isSuperAdmin,
-    isAdmin: currentUser.role === "Super Admin" || currentUser.role === "Admin",
-    isManager: currentUser.role === "Super Admin" || currentUser.role === "Admin" || currentUser.role === "Manager",
+    isAdmin,
+    isManager,
     capabilities,
     can: (cap) => capabilities.includes(cap),
     canAccess: (module) => {
+      if (!isAuthenticated) return false;
       if (isSuperAdmin) return true;
       if (ADMIN_ONLY_MODULES.includes(module) && !(currentUser.role === "Super Admin" || currentUser.role === "Admin")) return false;
       const requiredTeam = DEPARTMENT_MODULE_TO_TEAM[module];
@@ -458,8 +571,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return { ok: true };
     },
     signOut: () => {
-      appendSessionLog(currentUser, "Signed out");
-      setCurrentUserId(getDefaultCurrentUserId(userList));
+      if (isAuthenticated) appendSessionLog(currentUser, "Signed out");
+      setCurrentUserId("");
+      setActiveWorkspaceByUser({});
     },
     updatePassword: (currentPassword, nextPassword, userId = currentUser.id) => {
       if ((passwords[userId] ?? "") !== currentPassword) {
@@ -493,7 +607,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return next;
       });
       if (currentUserId === userId) {
-        setCurrentUserId(getDefaultCurrentUserId(userList.filter((user) => user.id !== userId)));
+        setCurrentUserId("");
       }
     },
     deletedUsers,
@@ -509,17 +623,34 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     canAccessWorkspace: (workspaceId) => (currentUser.workspaceIds ?? []).includes(workspaceId),
     upsertWorkspace,
     deleteWorkspace,
+    setTeamLeadIds,
+    getTeamLeadIds,
+    getTeamLeadUsers,
+    getTeamLeadNames,
+    getTeamApprovalRecipients,
+    canDecideTeamApprovals,
+    hasAssignedTeamLead,
   }), [
     accessibleWorkspaces,
     activeWorkspace,
     capabilities,
+    canDecideTeamApprovals,
     currentUser,
     currentUserId,
     deletedUsers,
+    getTeamApprovalRecipients,
+    getTeamLeadIds,
+    getTeamLeadNames,
+    getTeamLeadUsers,
+    hasAssignedTeamLead,
+    isAuthenticated,
+    isAdmin,
+    isManager,
     isSuperAdmin,
     passwords,
     rememberedEmail,
     sessionLogs,
+    teamLeadIdsByTeam,
     userList,
     userModules,
     visibleTeams,
@@ -548,6 +679,8 @@ export const useAuth = (): AuthCtx => {
 
   return {
     currentUser: anon,
+    isAuthenticated: false,
+    teamLeadIdsByTeam: DEFAULT_TEAM_LEAD_IDS_BY_TEAM,
     setCurrentUser: () => {},
     updateCurrentUser: () => {},
     userList: [],
@@ -577,5 +710,12 @@ export const useAuth = (): AuthCtx => {
     canAccessWorkspace: () => false,
     upsertWorkspace: () => {},
     deleteWorkspace: () => {},
+    setTeamLeadIds: () => ({ ok: false, message: "Authentication unavailable." }),
+    getTeamLeadIds: () => [],
+    getTeamLeadUsers: () => [],
+    getTeamLeadNames: () => [],
+    getTeamApprovalRecipients: () => [],
+    canDecideTeamApprovals: () => false,
+    hasAssignedTeamLead: () => false,
   };
 };

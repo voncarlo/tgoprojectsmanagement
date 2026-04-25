@@ -65,7 +65,7 @@ const canMoveTaskToStatus = (task: Task, status: TaskStatus, options: { canEditT
   return true;
 };
 const Tasks = () => {
-  const { visibleTeams, currentUser, can, userList } = useAuth();
+  const { visibleTeams, currentUser, can, userList, canDecideTeamApprovals, hasAssignedTeamLead, isAdmin } = useAuth();
   const { tasks, taskComments, updateTask, removeTask, addTask, decideTaskApproval, addTaskApprovalComment, addTaskComment, toggleTaskCommentReaction } = useData();
   const { isManager } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -619,7 +619,8 @@ const Tasks = () => {
                 {open.requiresApproval && (
                   <ApprovalPanel
                     task={open}
-                    canDecide={isManager}
+                    canDecide={canDecideTeamApprovals(open.team)}
+                    showMissingLeadWarning={!hasAssignedTeamLead(open.team) && isAdmin}
                     onDecide={(decision, c) => {
                       decideTaskApproval(open.id, decision, c);
                       const nextStatus =
@@ -754,11 +755,13 @@ const DetailRow = ({ label, children }: { label: string; children: React.ReactNo
 const ApprovalPanel = ({
   task,
   canDecide,
+  showMissingLeadWarning,
   onDecide,
   onComment,
 }: {
   task: Task;
   canDecide: boolean;
+  showMissingLeadWarning: boolean;
   onDecide: (decision: "Approved" | "Rejected" | "Returned for Revision", comment?: string) => void;
   onComment: (comment: string) => void;
 }) => {
@@ -818,6 +821,12 @@ const ApprovalPanel = ({
           </div>
         )}
 
+        {showMissingLeadWarning && (
+          <div className="rounded-lg border border-warning/20 bg-warning/10 px-3 py-2.5 text-xs text-warning">
+            No Manager or Team Lead is assigned to this department yet. Admins and Super Admins can still approve this task.
+          </div>
+        )}
+
         {showActions ? (
           <div className="space-y-2">
             <Textarea
@@ -842,7 +851,7 @@ const ApprovalPanel = ({
         ) : status === "Pending Approval" ? (
           <div className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2.5 text-xs text-muted-foreground">
             <Lock className="h-3.5 w-3.5" />
-            Awaiting approval from any manager, admin, or super admin.
+            Awaiting approval from the assigned Manager or Team Lead, plus Admins and Super Admins.
           </div>
         ) : (
           <div className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2.5 text-xs text-muted-foreground">

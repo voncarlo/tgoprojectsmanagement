@@ -3,6 +3,7 @@ import { seedUsers, seedTasks, seedProjects } from "./seed-data.mjs";
 
 const AUTH_META_KEY = "auth_meta";
 const LEGACY_AUTH_KEY = "auth";
+const TEAM_IDS = ["dispatch", "recruitment", "sales", "clients", "projects", "payroll", "bookkeeping", "businessAdmin"];
 
 const parseJson = (value, fallback) => {
   if (!value) return fallback;
@@ -315,6 +316,7 @@ export const getAuthState = async () => {
     passwords,
     userList: users,
     workspaces: authMeta?.workspaces ?? [],
+    teamLeadIdsByTeam: authMeta?.teamLeadIdsByTeam ?? {},
   };
 };
 
@@ -322,6 +324,13 @@ export const saveAuthState = async (payload) => {
   const nextUsers = payload.userList ?? [];
   const nextPasswords = payload.passwords ?? {};
   const incomingIds = nextUsers.map((user) => user.id);
+  const validUserIds = new Set(incomingIds);
+  const sanitizedTeamLeadIdsByTeam = Object.fromEntries(
+    TEAM_IDS.map((teamId) => {
+      const source = Array.isArray(payload.teamLeadIdsByTeam?.[teamId]) ? payload.teamLeadIdsByTeam[teamId] : [];
+      return [teamId, [...new Set(source.filter((userId) => validUserIds.has(userId)))]];
+    })
+  );
 
   for (const user of nextUsers) {
     await upsertUser(user);
@@ -342,6 +351,7 @@ export const saveAuthState = async (payload) => {
   await saveAuthMeta({
     currentUserId: payload.currentUserId ?? nextUsers[0]?.id ?? "",
     workspaces: payload.workspaces ?? [],
+    teamLeadIdsByTeam: sanitizedTeamLeadIdsByTeam,
   });
 };
 
@@ -370,6 +380,7 @@ export const migrateLegacyAuthSnapshot = async () => {
       JSON.stringify({
         currentUserId: legacy.currentUserId ?? legacy.userList[0]?.id ?? "",
         workspaces: legacy.workspaces ?? [],
+        teamLeadIdsByTeam: legacy.teamLeadIdsByTeam ?? {},
         legacyMigratedAt: new Date().toISOString(),
       }),
     ]

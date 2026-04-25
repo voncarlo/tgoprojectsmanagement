@@ -71,7 +71,7 @@ const cropImageToSquare = (src: string, zoom: number, offsetX: number, offsetY: 
   });
 
 const Settings = () => {
-  const { currentUser, updateCurrentUser, isAdmin, isSuperAdmin, userList, updatePassword: savePassword } = useAuth();
+  const { currentUser, updateCurrentUser, isAdmin, isSuperAdmin, userList, updatePassword: savePassword, getTeamLeadNames } = useAuth();
 
   const [name, setName] = useState(currentUser.name);
   const [email, setEmail] = useState(currentUser.email);
@@ -237,7 +237,7 @@ const Settings = () => {
                     <span className="h-2.5 w-2.5 rounded-full" style={{ background: `hsl(${t.color})` }} />
                     <div>
                       <div className="text-sm font-medium">{t.name}</div>
-                      <div className="text-xs text-muted-foreground">Lead: {t.lead}</div>
+                      <div className="text-xs text-muted-foreground">Lead: {getTeamLeadNames(t.id).join(", ") || "Unassigned"}</div>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 text-xs">

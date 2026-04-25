@@ -13,9 +13,10 @@ import { PageHeader } from "@/components/portal/PageHeader";
 import { TeamIcon } from "@/components/portal/TeamIcon";
 import { useData } from "@/store/DataContext";
 import { getProjectMembers } from "@/lib/project-access";
+import { Checkbox } from "@/components/ui/checkbox";
 
 const Teams = () => {
-  const { userList, setUserList, visibleTeams, isAdmin } = useAuth();
+  const { userList, setUserList, visibleTeams, isAdmin, getTeamLeadIds, getTeamLeadNames, setTeamLeadIds } = useAuth();
   const { tasks, projects } = useData();
   const visible = teams.filter(t => visibleTeams.includes(t.id));
   const [openTeam, setOpenTeam] = useState<TeamId | null>(null);
@@ -28,6 +29,9 @@ const Teams = () => {
   const activeTeam = openTeam ? teams.find(t => t.id === openTeam) ?? null : null;
   const activeTasks = activeTeam ? tasks.filter(t => t.team === activeTeam.id) : [];
   const activeProjects = activeTeam ? projects.filter(p => p.team === activeTeam.id) : [];
+  const eligibleLeadUsers = activeTeam
+    ? userList.filter((user) => user.status === "Active" && (user.teams.includes(activeTeam.id) || user.team === activeTeam.id || user.role === "Manager" || user.role === "Admin" || user.role === "Super Admin"))
+    : [];
 
   return (
   <>
@@ -41,6 +45,7 @@ const Teams = () => {
       const members = userList.filter(u => u.teams.includes(team.id));
       const teamTasks = tasks.filter(t => t.team === team.id);
       const teamProjects = projects.filter(p => p.team === team.id);
+      const teamLeadNames = getTeamLeadNames(team.id);
       const done = teamTasks.filter(t => t.status === "Completed").length;
       const rate = teamTasks.length ? Math.round((done / teamTasks.length) * 100) : 0;
 
@@ -92,7 +97,7 @@ const Teams = () => {
           <div className="flex items-center justify-between pt-3 border-t border-border">
             <div>
               <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Lead</div>
-              <div className="text-xs font-medium">{team.lead}</div>
+              <div className="text-xs font-medium">{teamLeadNames.length > 0 ? teamLeadNames.join(", ") : "Unassigned"}</div>
             </div>
             <div className="flex -space-x-2">
               {members.slice(0, 5).map(m => (
@@ -191,6 +196,47 @@ const Teams = () => {
               ))}
             </TabsContent>
           </Tabs>
+
+          {isAdmin && (
+            <Card className="mt-5 p-4">
+              <div className="mb-3">
+                <h3 className="text-sm font-semibold">Assigned Manager / Team Lead</h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  These users will be included in approval workflows, oversight, and team notifications together with all Admins and Super Admins.
+                </p>
+              </div>
+              <div className="space-y-2">
+                {eligibleLeadUsers.map((user) => {
+                  const checked = getTeamLeadIds(activeTeam.id).includes(user.id);
+                  return (
+                    <label key={user.id} className="flex items-center justify-between gap-3 rounded-lg border border-border p-3 text-sm">
+                      <div>
+                        <div className="font-medium">{user.name}</div>
+                        <div className="text-xs text-muted-foreground">{user.role}</div>
+                      </div>
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(value) => {
+                          const nextIds = value
+                            ? [...new Set([...getTeamLeadIds(activeTeam.id), user.id])]
+                            : getTeamLeadIds(activeTeam.id).filter((id) => id !== user.id);
+                          const result = setTeamLeadIds(activeTeam.id, nextIds);
+                          if (!result.ok) {
+                            toast.error(result.message ?? "Unable to update team leads.");
+                            return;
+                          }
+                          toast.success(`${activeTeam.name} leads updated`);
+                        }}
+                      />
+                    </label>
+                  );
+                })}
+                {eligibleLeadUsers.length === 0 && (
+                  <p className="text-xs text-muted-foreground">No eligible users are currently assigned to this department.</p>
+                )}
+              </div>
+            </Card>
+          )}
         </>
       )}
     </SheetContent>

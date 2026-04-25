@@ -246,10 +246,10 @@ const createRealtimeClientId = () =>
     : `client-${Math.random().toString(36).slice(2, 10)}`;
 const getRealtimeClientId = () => {
   if (typeof window === "undefined") return createRealtimeClientId();
-  const existing = window.localStorage.getItem(REALTIME_CLIENT_ID_STORAGE_KEY);
+  const existing = window.sessionStorage.getItem(REALTIME_CLIENT_ID_STORAGE_KEY);
   if (existing) return existing;
   const nextId = createRealtimeClientId();
-  window.localStorage.setItem(REALTIME_CLIENT_ID_STORAGE_KEY, nextId);
+  window.sessionStorage.setItem(REALTIME_CLIENT_ID_STORAGE_KEY, nextId);
   return nextId;
 };
 const nowLabel = () => "Just now";
@@ -721,6 +721,79 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     },
     [activeWorkspace?.isCompanyWide, visibleTeams]
   );
+  const getApprovalRecipientsForTeam = useCallback(
+    (team: TeamId) => auth.getTeamApprovalRecipients(team),
+    [auth]
+  );
+  const getApprovalSummaryForTeam = useCallback(
+    (team: TeamId) => {
+      const recipients = getApprovalRecipientsForTeam(team);
+      if (recipients.length === 0) return "Admins and Super Admins";
+      return recipients.map((user) => user.name).join(", ");
+    },
+    [getApprovalRecipientsForTeam]
+  );
+  const notifyApprovalRecipients = useCallback(
+    (
+      team: TeamId,
+      payload: {
+        action: string;
+        target: string;
+        preview: string;
+        entityType?: Notification["entityType"];
+        entityId?: string;
+        targetType?: Notification["targetType"];
+        targetId?: string;
+        parentId?: string;
+      }
+    ) => {
+      getApprovalRecipientsForTeam(team).forEach((recipient) => {
+        if (recipient.id === currentUser.id) return;
+        pushNotification({
+          user: currentUser.name,
+          action: payload.action,
+          target: payload.target,
+          preview: payload.preview,
+          recipientUserId: recipient.id,
+          team,
+          topic: "approval",
+          entityType: payload.entityType,
+          entityId: payload.entityId,
+          targetType: payload.targetType,
+          targetId: payload.targetId,
+          parentId: payload.parentId,
+        });
+      });
+    },
+    [currentUser.id, currentUser.name, getApprovalRecipientsForTeam, pushNotification]
+  );
+  const notifyApprovalRequester = useCallback(
+    (
+      userId: string | undefined,
+      payload: {
+        action: string;
+        target: string;
+        preview: string;
+        team: TeamId;
+        entityType?: Notification["entityType"];
+        entityId?: string;
+      }
+    ) => {
+      if (!userId || userId === currentUser.id) return;
+      pushNotification({
+        user: currentUser.name,
+        action: payload.action,
+        target: payload.target,
+        preview: payload.preview,
+        recipientUserId: userId,
+        team: payload.team,
+        topic: "approval",
+        entityType: payload.entityType,
+        entityId: payload.entityId,
+      });
+    },
+    [currentUser.id, currentUser.name, pushNotification]
+  );
 
   const addToRecycleBin = useCallback(
     (item: Omit<RecycleBinItem, "id" | "deletedAt" | "deletedBy">) => {
@@ -745,12 +818,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         id: id("t"),
         assignedBy: taskInput.assignedBy ?? currentUser.name,
         requiresApproval,
-        approver: requiresApproval ? taskInput.approver : undefined,
+        approver: requiresApproval ? taskInput.approver ?? getApprovalSummaryForTeam(taskInput.team) : undefined,
         approvalHistory: options?.approvalHistory ?? taskInput.approvalHistory ?? [],
         subtasks: normalizeSubtasks(taskInput.subtasks),
       } satisfies Task;
     },
-    [currentUser.name, currentUser.role]
+    [currentUser.name, currentUser.role, getApprovalSummaryForTeam]
   );
 
   const addTask: DataCtx["addTask"] = useCallback(
@@ -789,6 +862,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           category: "Approval",
           team: normalizedTask.team,
         });
+        notifyApprovalRecipients(normalizedTask.team, {
+          action: "submitted task request",
+          target: normalizedTask.title,
+          preview: `${currentUser.name} submitted a task request for ${normalizedTask.title}.`,
+          entityType: "approval",
+        });
         return null;
       }
 
@@ -804,7 +883,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       });
       return next;
     },
-    [appendAudit, buildTaskRecord, canDirectTaskCreate, currentUser.id, currentUser.name, pushActivity]
+    [appendAudit, buildTaskRecord, canDirectTaskCreate, currentUser.id, currentUser.name, notifyApprovalRecipients, pushActivity]
   );
 
   const updateTask: DataCtx["updateTask"] = useCallback(
@@ -820,7 +899,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             ...task,
             ...patch,
             requiresApproval: patch.requiresApproval ?? task.requiresApproval,
-            approver: (patch.requiresApproval ?? task.requiresApproval) ? patch.approver ?? task.approver : undefined,
+            approver: (patch.requiresApproval ?? task.requiresApproval) ? patch.approver ?? task.approver ?? getApprovalSummaryForTeam(task.team) : undefined,
             subtasks: normalizeSubtasks(patch.subtasks ?? task.subtasks),
           };
           if (
@@ -884,6 +963,15 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           return existing
             ? items.map((item) => (item.id === existing.id ? nextApproval : item))
             : [nextApproval, ...items];
+        });
+        notifyApprovalRecipients(updatedTask.team, {
+          action: "submitted task for approval",
+          target: updatedTask.title,
+          preview: `${updatedTask.title} is waiting for approval.`,
+          entityType: "approval",
+          entityId: updatedTask.id,
+          targetType: "task",
+          targetId: updatedTask.id,
         });
         return;
       }
@@ -973,6 +1061,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           category: "Approval",
           team: normalizedProject.team,
         });
+        notifyApprovalRecipients(normalizedProject.team, {
+          action: "submitted project request",
+          target: normalizedProject.name,
+          preview: `${currentUser.name} submitted a project request for ${normalizedProject.name}.`,
+          entityType: "approval",
+        });
         return null;
       }
 
@@ -981,7 +1075,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         ...normalizedProject,
         id: id("p"),
         requiresApproval,
-        approver: requiresApproval ? projectInput.approver : undefined,
+        approver: requiresApproval ? projectInput.approver ?? getApprovalSummaryForTeam(projectInput.team) : undefined,
         approvalHistory: [],
       };
       setProjects((items) => [next, ...items]);
@@ -995,7 +1089,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       });
       return next;
     },
-    [appendAudit, canDirectProjectCreate, currentUser.id, currentUser.name, currentUser.role, pushActivity]
+    [appendAudit, canDirectProjectCreate, currentUser.id, currentUser.name, currentUser.role, getApprovalSummaryForTeam, notifyApprovalRecipients, pushActivity]
   );
 
   const updateProject: DataCtx["updateProject"] = useCallback(
@@ -1010,7 +1104,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             ...patch,
             coOwners: normalizeCoOwners(patch.coOwners ?? project.coOwners),
             requiresApproval: patch.requiresApproval ?? project.requiresApproval,
-            approver: (patch.requiresApproval ?? project.requiresApproval) ? patch.approver ?? project.approver : undefined,
+            approver: (patch.requiresApproval ?? project.requiresApproval) ? patch.approver ?? project.approver ?? getApprovalSummaryForTeam(project.team) : undefined,
             subtasks: sortOpenSubtasksFirst(patch.subtasks ?? project.subtasks),
           });
           if (
@@ -1070,6 +1164,15 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           return existing
             ? items.map((item) => (item.id === existing.id ? nextApproval : item))
             : [nextApproval, ...items];
+        });
+        notifyApprovalRecipients(updatedProject.team, {
+          action: "submitted project for approval",
+          target: updatedProject.name,
+          preview: `${updatedProject.name} is waiting for approval.`,
+          entityType: "approval",
+          entityId: updatedProject.id,
+          targetType: "project",
+          targetId: updatedProject.id,
         });
         return;
       }
@@ -1183,6 +1286,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const decideTaskApproval: DataCtx["decideTaskApproval"] = useCallback(
     (taskId, decision, comment) => {
       let decidedTask: Task | null = null;
+      const existingTask = tasks.find((task) => task.id === taskId);
+      if (!existingTask || !auth.canDecideTeamApprovals(existingTask.team)) return;
       setTasks((items) =>
         items.map((task) => {
           if (task.id !== taskId) return task;
@@ -1240,13 +1345,23 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         category: "Approval",
         team: decidedTask.team,
       });
+      notifyApprovalRequester(existingTask.assignee ? auth.userList.find((user) => user.name === existingTask.assignee)?.id : undefined, {
+        action: `updated task approval to ${decision}`,
+        target: decidedTask.title,
+        preview: comment?.trim() || `${decidedTask.title} was ${decision.toLowerCase()}.`,
+        team: decidedTask.team,
+        entityType: "task",
+        entityId: decidedTask.id,
+      });
     },
-    [appendAudit, currentUser.name, pushActivity]
+    [appendAudit, auth, currentUser.name, notifyApprovalRequester, pushActivity, tasks]
   );
 
   const decideProjectApproval: DataCtx["decideProjectApproval"] = useCallback(
     (projectId, decision, comment) => {
       let decidedProject: Project | null = null;
+      const existingProject = projects.find((project) => project.id === projectId);
+      if (!existingProject || !auth.canDecideTeamApprovals(existingProject.team)) return;
       setProjects((items) =>
         items.map((project) => {
           if (project.id !== projectId) return project;
@@ -1304,8 +1419,16 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         category: "Approval",
         team: decidedProject.team,
       });
+      notifyApprovalRequester(auth.userList.find((user) => user.name === existingProject.owner)?.id, {
+        action: `updated project approval to ${decision}`,
+        target: decidedProject.name,
+        preview: comment?.trim() || `${decidedProject.name} was ${decision.toLowerCase()}.`,
+        team: decidedProject.team,
+        entityType: "project",
+        entityId: decidedProject.id,
+      });
     },
-    [appendAudit, currentUser.name, pushActivity]
+    [appendAudit, auth, currentUser.name, notifyApprovalRequester, projects, pushActivity]
   );
 
   const addTaskApprovalComment: DataCtx["addTaskApprovalComment"] = useCallback(
@@ -1345,7 +1468,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         preview: comment.trim(),
       });
     },
-    [appendAudit, currentUser.name, pushActivity]
+    [appendAudit, currentUser.name, getApprovalSummaryForTeam, notifyApprovalRecipients, pushActivity]
   );
 
   const addDocument: DataCtx["addDocument"] = useCallback(
@@ -1495,7 +1618,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       });
       return next;
     },
-    [appendAudit, currentUser.name, pushActivity]
+    [appendAudit, currentUser.name, getApprovalSummaryForTeam, notifyApprovalRecipients, pushActivity]
   );
 
   const removeCalendarEvent: DataCtx["removeCalendarEvent"] = useCallback(
@@ -1542,6 +1665,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         category: "Approval",
         team: approval.team,
       });
+      notifyApprovalRecipients(approval.team, {
+        action: "submitted PTO request",
+        target: event.title,
+        preview: `${event.createdByName} submitted a PTO request.`,
+        entityType: "approval",
+      });
       pushActivity({
         user: currentUser.name,
         action: "submitted PTO request",
@@ -1552,12 +1681,14 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         link: "/approvals",
       });
     },
-    [appendAudit, currentUser.name, pushActivity, visibleTeams]
+    [appendAudit, currentUser.name, notifyApprovalRecipients, pushActivity, visibleTeams]
   );
 
   const decideApproval: DataCtx["decideApproval"] = useCallback(
     (approvalId, status, comment) => {
       let updatedApproval: Approval | null = null;
+      const existingApproval = approvals.find((approval) => approval.id === approvalId);
+      if (!existingApproval || !auth.canDecideTeamApprovals(existingApproval.team)) return;
       setApprovals((items) =>
         items.map((approval) => {
           if (approval.id !== approvalId) return approval;
@@ -1667,8 +1798,16 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         category: "Approval",
         team: updatedApproval.team,
       });
+      notifyApprovalRequester(updatedApproval.requestedById, {
+        action: `updated approval to ${status}`,
+        target: updatedApproval.title,
+        preview: comment?.trim() || `${updatedApproval.title} is now ${status}.`,
+        team: updatedApproval.team,
+        entityType: "approval",
+        entityId: updatedApproval.id,
+      });
     },
-    [addCalendarEvent, appendAudit, buildTaskRecord, currentUser.name, decideProjectApproval, decideTaskApproval, pushActivity]
+    [addCalendarEvent, approvals, appendAudit, auth, buildTaskRecord, currentUser.name, decideProjectApproval, decideTaskApproval, notifyApprovalRequester, pushActivity]
   );
 
   const hideApproval: DataCtx["hideApproval"] = useCallback(

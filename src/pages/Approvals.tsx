@@ -36,7 +36,7 @@ const TYPE_TONE = {
 const FILTERS = ["All", "Pending", "Under Review", "Approved", "Rejected", "Returned"] as const;
 
 const Approvals = () => {
-  const { visibleTeams } = useAuth();
+  const { visibleTeams, canDecideTeamApprovals, hasAssignedTeamLead, isAdmin } = useAuth();
   const { approvals, decideApproval, hideApproval, removeApproval, clearApprovals } = useData();
   const [filter, setFilter] = useState<ApprovalStatus | "All">("All");
   const [open, setOpen] = useState<Approval | null>(null);
@@ -102,9 +102,11 @@ const Approvals = () => {
             cap="approval.decide"
             fallback={null}
           >
+            {isAdmin ? (
             <Button variant="outline" className="gap-1.5 text-destructive hover:text-destructive" onClick={clearAllApprovals}>
               <Trash2 className="h-4 w-4" /> Clear approvals
             </Button>
+            ) : null}
           </Can>
         }
       />
@@ -231,28 +233,45 @@ const Approvals = () => {
                   <Textarea rows={3} value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Optional feedback..." />
                 </div>
 
+                {!hasAssignedTeamLead(open.team) && isAdmin && (
+                  <div className="rounded-lg border border-warning/20 bg-warning/10 px-3 py-2.5 text-xs text-warning">
+                    No Manager or Team Lead is assigned to this department yet. Admins and Super Admins can still approve this request.
+                  </div>
+                )}
+
                 <Can
                   cap="approval.decide"
                   fallback={
                     <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2.5 text-xs text-muted-foreground">
                       <Lock className="h-3.5 w-3.5" />
-                      You can view this approval but only Managers and above can decide.
+                      You can view this approval but only the assigned Manager or Team Lead, plus Admins and Super Admins, can decide.
                     </div>
                   }
                 >
-                  <div className="flex flex-wrap gap-2 pt-2">
-                    <Button className="flex-1 gradient-primary text-primary-foreground gap-1.5" onClick={() => decide(open.id, "Approved")}><Check className="h-4 w-4" /> Approve</Button>
-                    <Button variant="outline" className="gap-1.5" onClick={() => decide(open.id, "Returned")}><RotateCcw className="h-4 w-4" /> Return</Button>
-                    <Button variant="outline" className="gap-1.5 text-destructive hover:text-destructive" onClick={() => decide(open.id, "Rejected")}><X className="h-4 w-4" /> Reject</Button>
-                  </div>
-                  <div className="flex gap-2 pt-2">
-                    <Button variant="outline" className="flex-1 gap-1.5" onClick={hideCurrentApproval}>
-                      <EyeOff className="h-4 w-4" /> Hide
-                    </Button>
-                    <Button variant="outline" className="flex-1 gap-1.5 text-destructive hover:text-destructive" onClick={deleteCurrentApproval}>
-                      <Trash2 className="h-4 w-4" /> Delete
-                    </Button>
-                  </div>
+                  {canDecideTeamApprovals(open.team) ? (
+                    <>
+                      <div className="flex flex-wrap gap-2 pt-2">
+                        <Button className="flex-1 gradient-primary text-primary-foreground gap-1.5" onClick={() => decide(open.id, "Approved")}><Check className="h-4 w-4" /> Approve</Button>
+                        <Button variant="outline" className="gap-1.5" onClick={() => decide(open.id, "Returned")}><RotateCcw className="h-4 w-4" /> Return</Button>
+                        <Button variant="outline" className="gap-1.5 text-destructive hover:text-destructive" onClick={() => decide(open.id, "Rejected")}><X className="h-4 w-4" /> Reject</Button>
+                      </div>
+                      {isAdmin && (
+                        <div className="flex gap-2 pt-2">
+                          <Button variant="outline" className="flex-1 gap-1.5" onClick={hideCurrentApproval}>
+                            <EyeOff className="h-4 w-4" /> Hide
+                          </Button>
+                          <Button variant="outline" className="flex-1 gap-1.5 text-destructive hover:text-destructive" onClick={deleteCurrentApproval}>
+                            <Trash2 className="h-4 w-4" /> Delete
+                          </Button>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2.5 text-xs text-muted-foreground">
+                      <Lock className="h-3.5 w-3.5" />
+                      You can view this approval but only the assigned Manager or Team Lead, plus Admins and Super Admins, can decide.
+                    </div>
+                  )}
                 </Can>
               </div>
             </>
