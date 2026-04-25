@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +23,13 @@ const Notifications = () => {
   ), [notifications, filter]);
 
   const unread = notifications.filter((n) => !n.read).length;
+
+  useEffect(() => {
+    if (unread > 0) {
+      markAllRead();
+    }
+  }, [markAllRead, unread]);
+
   const openNotification = (notificationId: string, link?: string) => {
     markNotificationRead(notificationId);
     navigate(link ?? "/notifications");

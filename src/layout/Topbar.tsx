@@ -62,6 +62,7 @@ export const Topbar = () => {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [floatingChatOpen, setFloatingChatOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -136,13 +137,16 @@ export const Topbar = () => {
             <MessageSquare className="h-[18px] w-[18px]" />
           </Button>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              asChild
-              onClick={() => {
-                if (unreadCount > 0) markAllRead();
-              }}
-            >
+          <DropdownMenu
+            open={notificationsOpen}
+            onOpenChange={(open) => {
+              setNotificationsOpen(open);
+              if (open && unreadCount > 0) {
+                markAllRead();
+              }
+            }}
+          >
+            <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="relative">
                 <Bell className="h-[18px] w-[18px]" />
                 {unreadCount > 0 && (

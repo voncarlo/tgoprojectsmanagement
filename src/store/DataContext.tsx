@@ -158,6 +158,7 @@ interface PersistedDataState {
   deletedProjectIds: string[];
   notifications: Notification[];
   approvals: Approval[];
+  deletedApprovalIds: string[];
   documents: DocumentFile[];
   deletedDocumentIds: string[];
   automations: AutomationRule[];
@@ -280,6 +281,7 @@ const mergePersistedState = (remoteState: PersistedDataState | null, localState:
   if (!remoteState) return localState;
   const deletedTaskIds = [...new Set([...(remoteState.deletedTaskIds ?? []), ...(localState.deletedTaskIds ?? [])])];
   const deletedProjectIds = [...new Set([...(remoteState.deletedProjectIds ?? []), ...(localState.deletedProjectIds ?? [])])];
+  const deletedApprovalIds = [...new Set([...(remoteState.deletedApprovalIds ?? []), ...(localState.deletedApprovalIds ?? [])])];
   const deletedDocumentIds = [...new Set([...(remoteState.deletedDocumentIds ?? []), ...(localState.deletedDocumentIds ?? [])])];
   const deletedCalendarEventIds = [...new Set([...(remoteState.deletedCalendarEventIds ?? []), ...(localState.deletedCalendarEventIds ?? [])])];
   return {
@@ -290,9 +292,11 @@ const mergePersistedState = (remoteState: PersistedDataState | null, localState:
     notifications: mergeRecordCollections(remoteState.notifications, localState.notifications),
     approvals: mergeRecordCollections(remoteState.approvals, localState.approvals).filter(
       (approval) =>
+        !deletedApprovalIds.includes(approval.id) &&
         (!approval.taskId || !deletedTaskIds.includes(approval.taskId)) &&
         (!approval.projectId || !deletedProjectIds.includes(approval.projectId))
     ),
+    deletedApprovalIds,
     documents: mergeRecordCollections(remoteState.documents, localState.documents).filter((document) => !deletedDocumentIds.includes(document.id)),
     deletedDocumentIds,
     automations: mergeRecordCollections(remoteState.automations, localState.automations),
@@ -318,6 +322,7 @@ const defaultState: PersistedDataState = {
   deletedProjectIds: [],
   notifications: seedActivity.map((item) => ({ ...item, read: false })),
   approvals: seedApprovals,
+  deletedApprovalIds: [],
   documents: seedDocuments,
   deletedDocumentIds: [],
   automations: seedAutomations,
@@ -339,6 +344,7 @@ const loadState = (): PersistedDataState => {
     const parsed = JSON.parse(raw) as Partial<PersistedDataState>;
     const deletedTaskIds = parsed.deletedTaskIds ?? defaultState.deletedTaskIds;
     const deletedProjectIds = parsed.deletedProjectIds ?? defaultState.deletedProjectIds;
+    const deletedApprovalIds = parsed.deletedApprovalIds ?? defaultState.deletedApprovalIds;
     const deletedDocumentIds = parsed.deletedDocumentIds ?? defaultState.deletedDocumentIds;
     const deletedCalendarEventIds = parsed.deletedCalendarEventIds ?? defaultState.deletedCalendarEventIds;
     return {
@@ -349,9 +355,11 @@ const loadState = (): PersistedDataState => {
       notifications: parsed.notifications?.length ? parsed.notifications : defaultState.notifications,
       approvals: (parsed.approvals?.length ? parsed.approvals : defaultState.approvals).filter(
         (approval) =>
+          !deletedApprovalIds.includes(approval.id) &&
           (!approval.taskId || !deletedTaskIds.includes(approval.taskId)) &&
           (!approval.projectId || !deletedProjectIds.includes(approval.projectId))
       ),
+      deletedApprovalIds,
       documents: (parsed.documents?.length ? parsed.documents : defaultState.documents).filter((document) => !deletedDocumentIds.includes(document.id)),
       deletedDocumentIds,
       automations: parsed.automations?.length ? parsed.automations : defaultState.automations,
@@ -535,6 +543,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [deletedProjectIds, setDeletedProjectIds] = useState<string[]>(initialState.deletedProjectIds ?? []);
   const [notifications, setNotifications] = useState<Notification[]>(initialState.notifications);
   const [approvals, setApprovals] = useState<Approval[]>(initialState.approvals);
+  const [deletedApprovalIds, setDeletedApprovalIds] = useState<string[]>(initialState.deletedApprovalIds ?? []);
   const [documents, setDocuments] = useState<DocumentFile[]>(initialState.documents);
   const [deletedDocumentIds, setDeletedDocumentIds] = useState<string[]>(initialState.deletedDocumentIds ?? []);
   const [automations, setAutomations] = useState<AutomationRule[]>(initialState.automations);
@@ -555,6 +564,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       deletedProjectIds,
       notifications,
       approvals,
+      deletedApprovalIds,
       documents,
       deletedDocumentIds,
       automations,
@@ -567,7 +577,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       chatReadAtByUser,
       personalNotes,
     }),
-    [approvals, auditLog, automations, calendarEvents, chats, chatReadAtByUser, deletedCalendarEventIds, deletedDocumentIds, deletedProjectIds, deletedTaskIds, documents, notifications, personalNotes, projects, recycleBin, taskComments, tasks]
+    [approvals, auditLog, automations, calendarEvents, chats, chatReadAtByUser, deletedApprovalIds, deletedCalendarEventIds, deletedDocumentIds, deletedProjectIds, deletedTaskIds, documents, notifications, personalNotes, projects, recycleBin, taskComments, tasks]
   );
   const applyRemoteState = useCallback((remoteState: PersistedDataState, revision = 0) => {
     skipNextServerSaveRef.current = true;
@@ -580,10 +590,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     setApprovals(
       (remoteState.approvals ?? defaultState.approvals).filter(
         (approval) =>
+          !(remoteState.deletedApprovalIds ?? []).includes(approval.id) &&
           (!approval.taskId || !(remoteState.deletedTaskIds ?? []).includes(approval.taskId)) &&
           (!approval.projectId || !(remoteState.deletedProjectIds ?? []).includes(approval.projectId))
       )
     );
+    setDeletedApprovalIds(remoteState.deletedApprovalIds ?? []);
     setDocuments((remoteState.documents ?? defaultState.documents).filter((document) => !(remoteState.deletedDocumentIds ?? []).includes(document.id)));
     setDeletedDocumentIds(remoteState.deletedDocumentIds ?? []);
     setAutomations(remoteState.automations ?? defaultState.automations);
@@ -1079,6 +1091,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             approvalHistory: [],
           },
         };
+        setDeletedApprovalIds((items) => items.filter((approvalId) => approvalId !== approval.id));
         setApprovals((items) => [approval, ...items]);
         console.debug("[approvals] created task approval request", {
           approvalId: approval.id,
@@ -1209,6 +1222,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             departmentId: updatedTask.team,
             approverIds: getApprovalRecipientIdsForTeam(updatedTask.team),
           };
+          setDeletedApprovalIds((items) => items.filter((approvalId) => approvalId !== nextApproval.id));
           return existing
             ? items.map((item) => (item.id === existing.id ? nextApproval : item))
             : [nextApproval, ...items];
@@ -1324,6 +1338,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             approvalHistory: [],
           },
         };
+        setDeletedApprovalIds((items) => items.filter((approvalId) => approvalId !== approval.id));
         setApprovals((items) => [approval, ...items]);
         console.debug("[approvals] created project approval request", {
           approvalId: approval.id,
@@ -1489,6 +1504,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             departmentId: updatedProject.team,
             approverIds: getApprovalRecipientIdsForTeam(updatedProject.team),
           };
+          setDeletedApprovalIds((items) => items.filter((approvalId) => approvalId !== nextApproval.id));
           return existing
             ? items.map((item) => (item.id === existing.id ? nextApproval : item))
             : [nextApproval, ...items];
@@ -2044,6 +2060,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         approverIds,
         calendarEventDraft: event,
       };
+      setDeletedApprovalIds((items) => items.filter((approvalId) => approvalId !== approval.id));
       setApprovals((items) => [approval, ...items]);
       console.debug("[approvals] created leave approval request", {
         approvalId: approval.id,
@@ -2269,6 +2286,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const removeApproval: DataCtx["removeApproval"] = useCallback(
     (approvalId) => {
       let removedApproval: Approval | null = null;
+      setDeletedApprovalIds((items) => (items.includes(approvalId) ? items : [approvalId, ...items]));
       setApprovals((items) =>
         items.filter((approval) => {
           if (approval.id === approvalId) removedApproval = approval;
@@ -2288,8 +2306,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   );
 
   const clearApprovals: DataCtx["clearApprovals"] = useCallback(() => {
+    setDeletedApprovalIds((items) => [...new Set([...items, ...approvals.map((approval) => approval.id)])]);
     setApprovals([]);
-  }, []);
+  }, [approvals]);
 
   const clearAuditLog: DataCtx["clearAuditLog"] = useCallback(() => {
     setAuditLog([]);
