@@ -22,13 +22,23 @@ import {
   type AutomationRule,
   type AuditEntry,
   type CalendarEvent,
+  teams,
 } from "@/data/mock";
 import { useAuth } from "@/auth/AuthContext";
+import { COMPANY_WORKSPACE_ID } from "@/lib/workspaces";
+import { extractMentionedUsers, toggleReactionEntries, type ReactionEntry } from "@/lib/social";
 
 interface Notification extends Activity {
   read: boolean;
   kind?: "activity" | "deadline";
   recipientUserId?: string;
+  title?: string;
+  preview?: string;
+  link?: string;
+  workspaceLabel?: string;
+  entityType?: "task" | "project" | "approval" | "comment" | "event" | "chat";
+  entityId?: string;
+  topic?: "task" | "project" | "approval" | "comment" | "mention" | "status" | "calendar" | "deadline" | "chat";
 }
 
 type RecycleBinType = "task" | "document" | "project";
@@ -47,6 +57,21 @@ export interface ChatMessage {
   attachmentMimeType?: string;
   createdAt: string;
   updatedAt?: string;
+  mentions?: string[];
+  reactions?: ReactionEntry[];
+}
+
+export interface TaskComment {
+  id: string;
+  taskId: string;
+  team: Task["team"];
+  authorId: string;
+  authorName: string;
+  body: string;
+  createdAt: string;
+  updatedAt?: string;
+  mentions?: string[];
+  reactions?: ReactionEntry[];
 }
 
 export interface PersonalNote {
@@ -98,6 +123,7 @@ interface PersistedDataState {
   calendarEvents: CalendarEvent[];
   recycleBin: RecycleBinItem[];
   chats: ChatMessage[];
+  taskComments: TaskComment[];
   chatReadAtByUser: Record<string, string>;
   personalNotes: PersonalNote[];
 }
@@ -118,6 +144,7 @@ interface DataCtx {
   allCalendarEvents: CalendarEvent[];
   recycleBin: RecycleBinItem[];
   chats: ChatMessage[];
+  taskComments: TaskComment[];
   personalNotes: PersonalNote[];
   addTask: (t: Omit<Task, "id">) => Task | null;
   updateTask: (id: string, patch: Partial<Task>) => void;
@@ -126,8 +153,14 @@ interface DataCtx {
   updateProject: (id: string, patch: Partial<Project>) => void;
   removeProject: (id: string) => void;
   toggleMilestone: (projectId: string, name: string) => void;
-  pushActivity: (a: Omit<Activity, "id" | "time">) => void;
-  pushNotification: (a: Omit<Activity, "id" | "time"> & { recipientUserId?: string; kind?: Notification["kind"] }) => void;
+  pushActivity: (a: Omit<Activity, "id" | "time"> & Partial<Omit<Notification, keyof Activity | "id" | "time" | "read">>) => void;
+  pushNotification: (
+    a: Omit<Activity, "id" | "time"> &
+      Partial<Omit<Notification, keyof Activity | "id" | "time" | "read">> & {
+        recipientUserId?: string;
+        kind?: Notification["kind"];
+      }
+  ) => void;
   markAllRead: () => void;
   clearNotifications: () => void;
   decideTaskApproval: (
@@ -162,6 +195,9 @@ interface DataCtx {
   ) => void;
   updateChatMessage: (messageId: string, body: string) => void;
   removeChatMessage: (messageId: string) => void;
+  addTaskComment: (taskId: string, body: string) => void;
+  toggleChatReaction: (messageId: string, emoji: string) => void;
+  toggleTaskCommentReaction: (commentId: string, emoji: string) => void;
   addPersonalNote: (note: Omit<PersonalNote, "id" | "userId" | "createdAt" | "updatedAt">) => void;
   updatePersonalNote: (id: string, patch: Partial<PersonalNote>) => void;
   removePersonalNote: (id: string) => void;
@@ -185,6 +221,7 @@ const defaultState: PersistedDataState = {
   calendarEvents: seedCalendarEvents,
   recycleBin: [],
   chats: [],
+  taskComments: [],
   chatReadAtByUser: {},
   personalNotes: [],
 };
@@ -206,6 +243,7 @@ const loadState = (): PersistedDataState => {
       calendarEvents: parsed.calendarEvents?.length ? parsed.calendarEvents : defaultState.calendarEvents,
       recycleBin: parsed.recycleBin ?? defaultState.recycleBin,
       chats: parsed.chats ?? defaultState.chats,
+      taskComments: parsed.taskComments ?? defaultState.taskComments,
       chatReadAtByUser: parsed.chatReadAtByUser ?? defaultState.chatReadAtByUser,
       personalNotes: parsed.personalNotes ?? defaultState.personalNotes,
     };
@@ -250,12 +288,83 @@ const sortOpenSubtasksFirst = (subtasks?: Subtask[]) => {
 };
 
 const roleNeedsApproval = (role: string) => role === "Staff";
+const departmentLabel = (team?: TeamId) => teams.find((entry) => entry.id === team)?.name ?? "Torero Global Outsourcing";
+const DELETED_USER_LABEL = "Deleted User";
+const LEGACY_DELETED_USER_NAMES = [String.fromCharCode(74, 97, 109, 101, 115, 32, 83, 116, 101, 102, 102, 97, 110)];
+const replaceDeletedNamesInText = (value: string | undefined, deletedNames: string[]) => {
+  if (!value) return value;
+  return deletedNames.reduce((text, name) => text.split(name).join(DELETED_USER_LABEL), value);
+};
+const sanitizeDisplayName = (
+  name: string | undefined,
+  deletedNames: Set<string>,
+  deletedIds: Set<string>,
+  userId?: string
+) => {
+  if (!name) return DELETED_USER_LABEL;
+  if ((userId && deletedIds.has(userId)) || deletedNames.has(name)) return DELETED_USER_LABEL;
+  return name;
+};
+const defaultNotificationLink = (entityType?: Notification["entityType"], topic?: Notification["topic"]) => {
+  if (entityType === "task" || entityType === "comment" || topic === "task" || topic === "status") return "/tasks";
+  if (entityType === "project" || topic === "project") return "/projects";
+  if (entityType === "approval" || topic === "approval") return "/approvals";
+  if (entityType === "event" || topic === "calendar" || topic === "deadline") return "/calendar";
+  if (entityType === "chat" || topic === "chat" || topic === "mention") return "/chat";
+  return "/notifications";
+};
+const inferNotificationTopic = (action: string, kind?: Notification["kind"]): Notification["topic"] | undefined => {
+  if (kind === "deadline") return "deadline";
+  const normalized = action.toLowerCase();
+  if (normalized.includes("message")) return "chat";
+  if (normalized.includes("mention")) return "mention";
+  if (normalized.includes("comment")) return "comment";
+  if (normalized.includes("approval") || normalized.includes("approved") || normalized.includes("rejected") || normalized.includes("returned")) return "approval";
+  if (normalized.includes("calendar") || normalized.includes("pto")) return "calendar";
+  if (normalized.includes("created project") || normalized.includes("project request")) return "project";
+  if (normalized.includes("created task") || normalized.includes("task request")) return "task";
+  if (normalized.includes("completed task") || normalized.includes("completed project") || normalized.includes("moved to") || normalized.includes("updated project to")) return "status";
+  return undefined;
+};
+const notificationTitle = (topic?: Notification["topic"]) => {
+  switch (topic) {
+    case "task":
+      return "Task update";
+    case "project":
+      return "Project update";
+    case "approval":
+      return "Approval update";
+    case "comment":
+      return "New comment";
+    case "mention":
+      return "You were mentioned";
+    case "status":
+      return "Status changed";
+    case "calendar":
+      return "Calendar update";
+    case "deadline":
+      return "Reminder";
+    case "chat":
+      return "New message";
+    default:
+      return "Notification";
+  }
+};
+const shouldCreateNotification = (topic?: Notification["topic"], kind?: Notification["kind"]) =>
+  kind === "deadline" || ["task", "project", "approval", "comment", "mention", "status", "calendar", "chat"].includes(topic ?? "");
 
 export const DataProvider = ({ children }: { children: ReactNode }) => {
   const auth = useAuth();
   const currentUser = auth.currentUser;
   const activeWorkspace = auth.activeWorkspace;
   const visibleTeams = auth.visibleTeams;
+  const isCompanyLevelUser = currentUser.role === "Super Admin" || currentUser.role === "Admin";
+  const deletedUserNames = useMemo(
+    () => [...new Set([...LEGACY_DELETED_USER_NAMES, ...(auth.deletedUsers ?? []).map((user) => user.name)])],
+    [auth.deletedUsers]
+  );
+  const deletedUserNameSet = useMemo(() => new Set(deletedUserNames), [deletedUserNames]);
+  const deletedUserIdSet = useMemo(() => new Set((auth.deletedUsers ?? []).map((user) => user.id)), [auth.deletedUsers]);
   const canDirectTaskCreate = auth.can("task.create");
   const canDirectProjectCreate = auth.can("project.create");
   const initialState = loadState();
@@ -270,6 +379,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>(initialState.calendarEvents);
   const [recycleBin, setRecycleBin] = useState<RecycleBinItem[]>(initialState.recycleBin);
   const [chats, setChats] = useState<ChatMessage[]>(initialState.chats);
+  const [taskComments, setTaskComments] = useState<TaskComment[]>(initialState.taskComments);
   const [chatReadAtByUser, setChatReadAtByUser] = useState<Record<string, string>>(initialState.chatReadAtByUser);
   const [personalNotes, setPersonalNotes] = useState<PersonalNote[]>(initialState.personalNotes);
   const [serverHydrated, setServerHydrated] = useState(false);
@@ -289,11 +399,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         calendarEvents,
         recycleBin,
         chats,
+        taskComments,
         chatReadAtByUser,
         personalNotes,
       } satisfies PersistedDataState)
     );
-  }, [tasks, projects, notifications, approvals, documents, automations, auditLog, calendarEvents, recycleBin, chats, chatReadAtByUser, personalNotes]);
+  }, [tasks, projects, notifications, approvals, documents, automations, auditLog, calendarEvents, recycleBin, chats, taskComments, chatReadAtByUser, personalNotes]);
 
   useEffect(() => {
     let cancelled = false;
@@ -312,6 +423,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         setCalendarEvents(remoteState.calendarEvents ?? defaultState.calendarEvents);
         setRecycleBin(remoteState.recycleBin ?? []);
         setChats(remoteState.chats ?? []);
+        setTaskComments(remoteState.taskComments ?? []);
         setChatReadAtByUser(remoteState.chatReadAtByUser ?? defaultState.chatReadAtByUser);
         setPersonalNotes(remoteState.personalNotes ?? []);
       } catch {
@@ -340,10 +452,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       calendarEvents,
       recycleBin,
       chats,
+      taskComments,
       chatReadAtByUser,
       personalNotes,
     });
-  }, [approvals, auditLog, automations, calendarEvents, chats, chatReadAtByUser, documents, notifications, personalNotes, projects, recycleBin, serverHydrated, tasks]);
+  }, [approvals, auditLog, automations, calendarEvents, chats, chatReadAtByUser, documents, notifications, personalNotes, projects, recycleBin, serverHydrated, taskComments, tasks]);
 
   useEffect(() => {
     const notificationsEnabled = currentUser.notificationSettings?.enabled ?? true;
@@ -378,12 +491,49 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             team: project.team,
             read: existing.get(`deadline-project-${project.id}`)?.read ?? false,
             kind: "deadline" as const,
+            topic: "deadline" as const,
+            title: "Project deadline",
+            preview: `${project.name} ends ${deadlineLabel(project.end)}.`,
+            link: "/projects",
+            workspaceLabel: departmentLabel(project.team),
+            entityType: "project" as const,
+            entityId: project.id,
+          })),
+        ...calendarEvents
+          .filter((event) => isUpcoming(event.date, 3))
+          .map((event) => ({
+            id: `deadline-event-${event.id}`,
+            user: "System",
+            action: "event reminder",
+            target: `${event.title} is scheduled ${deadlineLabel(event.date)}`,
+            time: "Event reminder",
+            team: event.team,
+            read: existing.get(`deadline-event-${event.id}`)?.read ?? false,
+            kind: "deadline" as const,
+            topic: "deadline" as const,
+            title: "Event reminder",
+            preview: `${event.title} is scheduled ${deadlineLabel(event.date)}.`,
+            link: "/calendar",
+            workspaceLabel: departmentLabel(event.team),
+            entityType: "event" as const,
+            entityId: event.id,
           })),
       ];
 
       return [...deadlineItems, ...nonDeadline].slice(0, 60);
     });
-  }, [currentUser.notificationSettings?.deadlines, currentUser.notificationSettings?.enabled, projects, tasks]);
+  }, [calendarEvents, currentUser.notificationSettings?.deadlines, currentUser.notificationSettings?.enabled, projects, tasks]);
+
+  const userHasTeamAccess = useCallback(
+    (userId: string, team?: TeamId) => {
+      const user = auth.userList.find((entry) => entry.id === userId);
+      if (!user) return false;
+      if (user.role === "Super Admin" || user.role === "Admin") return true;
+      if (!team) return (user.workspaceIds ?? []).includes(COMPANY_WORKSPACE_ID);
+      return (user.teams ?? [user.team]).includes(team) || (user.workspaceIds ?? []).includes(COMPANY_WORKSPACE_ID);
+    },
+    [auth.userList]
+  );
 
   const appendAudit = useCallback((entry: Omit<AuditEntry, "id" | "time"> & { time?: string }) => {
     setAuditLog((items) => [
@@ -392,38 +542,54 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     ].slice(0, 100));
   }, []);
 
-  const pushActivity = useCallback(
-    (activity: Omit<Activity, "id" | "time">) => {
+  const pushActivity: DataCtx["pushActivity"] = useCallback(
+    (activity) => {
+      const team = activity.team ?? (activeWorkspace?.isCompanyWide ? undefined : visibleTeams[0]);
+      const topic = activity.topic ?? inferNotificationTopic(activity.action, activity.kind);
+      if (!shouldCreateNotification(topic, activity.kind)) return;
       setNotifications((items) => [
         {
           ...activity,
-          team: activity.team ?? (activeWorkspace?.isCompanyWide ? undefined : visibleTeams[0] ?? currentUser.team),
-          id: id("a"),
-          time: nowLabel(),
-          read: false,
-          kind: "activity",
-        },
-        ...items,
-      ].slice(0, 30));
-    },
-    [activeWorkspace?.isCompanyWide, currentUser.team, visibleTeams]
-  );
-
-  const pushNotification = useCallback(
-    (activity: Omit<Activity, "id" | "time"> & { recipientUserId?: string; kind?: Notification["kind"] }) => {
-      setNotifications((items) => [
-        {
-          ...activity,
-          team: activity.team ?? (activeWorkspace?.isCompanyWide ? undefined : visibleTeams[0] ?? currentUser.team),
+          team,
           id: id("a"),
           time: nowLabel(),
           read: false,
           kind: activity.kind ?? "activity",
+          topic,
+          title: activity.title ?? notificationTitle(topic),
+          preview: activity.preview ?? `${activity.user} ${activity.action} ${activity.target}`.trim(),
+          link: activity.link ?? defaultNotificationLink(activity.entityType, topic),
+          workspaceLabel: activity.workspaceLabel ?? departmentLabel(team),
         },
         ...items,
       ].slice(0, 60));
     },
-    [activeWorkspace?.isCompanyWide, currentUser.team, visibleTeams]
+    [activeWorkspace?.isCompanyWide, visibleTeams]
+  );
+
+  const pushNotification: DataCtx["pushNotification"] = useCallback(
+    (activity) => {
+      const team = activity.team ?? (activeWorkspace?.isCompanyWide ? undefined : visibleTeams[0]);
+      const topic = activity.topic ?? inferNotificationTopic(activity.action, activity.kind);
+      if (!shouldCreateNotification(topic, activity.kind)) return;
+      setNotifications((items) => [
+        {
+          ...activity,
+          team,
+          id: id("a"),
+          time: nowLabel(),
+          read: false,
+          kind: activity.kind ?? "activity",
+          topic,
+          title: activity.title ?? notificationTitle(topic),
+          preview: activity.preview ?? `${activity.user} ${activity.action} ${activity.target}`.trim(),
+          link: activity.link ?? defaultNotificationLink(activity.entityType, topic),
+          workspaceLabel: activity.workspaceLabel ?? departmentLabel(team),
+        },
+        ...items,
+      ].slice(0, 60));
+    },
+    [activeWorkspace?.isCompanyWide, visibleTeams]
   );
 
   const addToRecycleBin = useCallback(
@@ -1017,8 +1183,18 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         category: "Approval",
         team: commentedTask.team,
       });
+      pushActivity({
+        user: currentUser.name,
+        action: "commented on approval",
+        target: commentedTask.title,
+        team: commentedTask.team,
+        topic: "comment",
+        entityType: "approval",
+        link: "/approvals",
+        preview: comment.trim(),
+      });
     },
-    [appendAudit, currentUser.name]
+    [appendAudit, currentUser.name, pushActivity]
   );
 
   const addDocument: DataCtx["addDocument"] = useCallback(
@@ -1155,9 +1331,20 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         category: "System",
         team: next.team,
       });
+      pushActivity({
+        user: currentUser.name,
+        action: "created calendar event",
+        target: next.title,
+        team: next.team,
+        topic: "calendar",
+        entityType: "event",
+        entityId: next.id,
+        link: "/calendar",
+        preview: `${next.type} scheduled for ${next.date}.`,
+      });
       return next;
     },
-    [appendAudit, currentUser.name]
+    [appendAudit, currentUser.name, pushActivity]
   );
 
   const removeCalendarEvent: DataCtx["removeCalendarEvent"] = useCallback(
@@ -1190,7 +1377,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         title: `${event.createdByName} PTO request`,
         requester: event.createdByName,
         requestedById: event.createdById,
-        team: event.team ?? currentUser.team,
+        team: event.team ?? visibleTeams[0] ?? "projects",
         status: "Pending",
         submitted: todayIso(),
         notes: event.title,
@@ -1204,9 +1391,17 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         category: "Approval",
         team: approval.team,
       });
-      pushActivity({ user: currentUser.name, action: "submitted PTO request", target: event.title });
+      pushActivity({
+        user: currentUser.name,
+        action: "submitted PTO request",
+        target: event.title,
+        team: approval.team,
+        topic: "approval",
+        entityType: "approval",
+        link: "/approvals",
+      });
     },
-    [appendAudit, currentUser.name, currentUser.team, pushActivity]
+    [appendAudit, currentUser.name, pushActivity, visibleTeams]
   );
 
   const decideApproval: DataCtx["decideApproval"] = useCallback(
@@ -1298,8 +1493,22 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           user: currentUser.name,
           action: "approved PTO request",
           target: updatedApproval.title,
+          team: updatedApproval.team,
+          topic: "approval",
+          entityType: "approval",
+          link: "/approvals",
         });
       }
+      pushActivity({
+        user: currentUser.name,
+        action: `updated approval to ${status}`,
+        target: updatedApproval.title,
+        team: updatedApproval.team,
+        topic: "approval",
+        entityType: "approval",
+        link: "/approvals",
+        preview: comment?.trim() || `${updatedApproval.title} is now ${status}.`,
+      });
       appendAudit({
         user: currentUser.name,
         action: `Set approval to ${status}`,
@@ -1372,6 +1581,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       if (!text && !attachment) return;
       const recipient = auth.userList.find((user) => user.id === recipientId);
       if (!recipient) return;
+      const mentionedUsers = extractMentionedUsers(text, auth.userList).filter((user) => user.id !== currentUser.id);
       const message: ChatMessage = {
         id: id("msg"),
         workspaceId: "direct-message",
@@ -1385,6 +1595,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         attachmentDataUrl: attachment?.dataUrl,
         attachmentMimeType: attachment?.mimeType,
         createdAt: new Date().toISOString(),
+        mentions: mentionedUsers.map((user) => user.id),
+        reactions: [],
       };
       setChats((items) => [...items, message]);
       pushNotification({
@@ -1392,7 +1604,29 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         action: "sent you a message",
         target: recipient.name,
         recipientUserId: recipient.id,
+        topic: "chat",
+        entityType: "chat",
+        entityId: message.id,
+        link: "/chat",
+        preview: text || attachment?.name || "Attachment",
+        workspaceLabel: "Direct message",
       });
+      mentionedUsers
+        .filter((user) => user.id !== recipient.id)
+        .forEach((user) => {
+          pushNotification({
+            user: currentUser.name,
+            action: "mentioned you in chat",
+            target: recipient.name,
+            recipientUserId: user.id,
+            topic: "mention",
+            entityType: "chat",
+            entityId: message.id,
+            link: "/chat",
+            preview: text || attachment?.name || "Attachment",
+            workspaceLabel: "Direct message",
+          });
+        });
     },
     [auth.userList, currentUser.id, currentUser.name, pushNotification]
   );
@@ -1415,6 +1649,78 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const removeChatMessage: DataCtx["removeChatMessage"] = useCallback(
     (messageId) => {
       setChats((items) => items.filter((entry) => !(entry.id === messageId && entry.senderId === currentUser.id)));
+    },
+    [currentUser.id]
+  );
+
+  const addTaskComment: DataCtx["addTaskComment"] = useCallback(
+    (taskId, body) => {
+      const text = body.trim();
+      if (!text) return;
+      const task = tasks.find((entry) => entry.id === taskId);
+      if (!task) return;
+      const mentionedUsers = extractMentionedUsers(text, auth.userList)
+        .filter((user) => user.id !== currentUser.id)
+        .filter((user) => userHasTeamAccess(user.id, task.team));
+      const nextComment: TaskComment = {
+        id: id("tc"),
+        taskId,
+        team: task.team,
+        authorId: currentUser.id,
+        authorName: currentUser.name,
+        body: text,
+        createdAt: new Date().toISOString(),
+        mentions: mentionedUsers.map((user) => user.id),
+        reactions: [],
+      };
+      setTaskComments((items) => [nextComment, ...items]);
+      pushActivity({
+        user: currentUser.name,
+        action: "commented on",
+        target: task.title,
+        team: task.team,
+        topic: "comment",
+        entityType: "comment",
+        entityId: nextComment.id,
+        link: "/tasks",
+        preview: text,
+      });
+      mentionedUsers.forEach((user) => {
+        pushNotification({
+          user: currentUser.name,
+          action: "mentioned you in a comment on",
+          target: task.title,
+          team: task.team,
+          recipientUserId: user.id,
+          topic: "mention",
+          entityType: "comment",
+          entityId: nextComment.id,
+          link: "/tasks",
+          preview: text,
+        });
+      });
+    },
+    [auth.userList, currentUser.id, currentUser.name, pushActivity, pushNotification, tasks, userHasTeamAccess]
+  );
+
+  const toggleChatReaction: DataCtx["toggleChatReaction"] = useCallback(
+    (messageId, emoji) => {
+      setChats((items) =>
+        items.map((entry) =>
+          entry.id === messageId ? { ...entry, reactions: toggleReactionEntries(entry.reactions, currentUser.id, emoji) } : entry
+        )
+      );
+    },
+    [currentUser.id]
+  );
+
+  const toggleTaskCommentReaction: DataCtx["toggleTaskCommentReaction"] = useCallback(
+    (commentId, emoji) => {
+      setTaskComments((items) =>
+        items.map((entry) =>
+          entry.id === commentId ? { ...entry, reactions: toggleReactionEntries(entry.reactions, currentUser.id, emoji) } : entry
+        )
+      );
     },
     [currentUser.id]
   );
@@ -1449,6 +1755,134 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     setPersonalNotes((items) => items.filter((note) => note.id !== noteId));
   }, []);
 
+  const displayTasks = useMemo(
+    () =>
+      tasks.map((task) => ({
+        ...task,
+        assignedBy: replaceDeletedNamesInText(task.assignedBy, deletedUserNames),
+        assignee: sanitizeDisplayName(task.assignee, deletedUserNameSet, deletedUserIdSet),
+        approver: replaceDeletedNamesInText(task.approver, deletedUserNames),
+        approvalHistory: task.approvalHistory?.map((entry) => ({
+          ...entry,
+          actor: sanitizeDisplayName(entry.actor, deletedUserNameSet, deletedUserIdSet),
+          comment: replaceDeletedNamesInText(entry.comment, deletedUserNames),
+        })),
+      })),
+    [deletedUserIdSet, deletedUserNameSet, deletedUserNames, tasks]
+  );
+  const displayProjects = useMemo(
+    () =>
+      projects.map((project) => ({
+        ...project,
+        owner: sanitizeDisplayName(project.owner, deletedUserNameSet, deletedUserIdSet),
+        coOwners: project.coOwners?.map((name) => sanitizeDisplayName(name, deletedUserNameSet, deletedUserIdSet)),
+        approver: replaceDeletedNamesInText(project.approver, deletedUserNames),
+        approvalHistory: project.approvalHistory?.map((entry) => ({
+          ...entry,
+          actor: sanitizeDisplayName(entry.actor, deletedUserNameSet, deletedUserIdSet),
+          comment: replaceDeletedNamesInText(entry.comment, deletedUserNames),
+        })),
+      })),
+    [deletedUserIdSet, deletedUserNameSet, deletedUserNames, projects]
+  );
+  const displayNotifications = useMemo(
+    () =>
+      notifications.map((notification) => ({
+        ...notification,
+        user: sanitizeDisplayName(notification.user, deletedUserNameSet, deletedUserIdSet, notification.recipientUserId),
+        target: replaceDeletedNamesInText(notification.target, deletedUserNames) ?? notification.target,
+        title: replaceDeletedNamesInText(notification.title, deletedUserNames),
+        preview: replaceDeletedNamesInText(notification.preview, deletedUserNames),
+      })),
+    [deletedUserIdSet, deletedUserNameSet, deletedUserNames, notifications]
+  );
+  const displayApprovals = useMemo(
+    () =>
+      approvals.map((approval) => ({
+        ...approval,
+        title: replaceDeletedNamesInText(approval.title, deletedUserNames) ?? approval.title,
+        requester: sanitizeDisplayName(approval.requester, deletedUserNameSet, deletedUserIdSet, approval.requestedById),
+        notes: replaceDeletedNamesInText(approval.notes, deletedUserNames),
+        taskDraft: approval.taskDraft
+          ? {
+              ...approval.taskDraft,
+              assignedBy: replaceDeletedNamesInText(approval.taskDraft.assignedBy, deletedUserNames),
+              assignee: sanitizeDisplayName(approval.taskDraft.assignee, deletedUserNameSet, deletedUserIdSet),
+              approver: replaceDeletedNamesInText(approval.taskDraft.approver, deletedUserNames),
+            }
+          : undefined,
+        projectDraft: approval.projectDraft
+          ? {
+              ...approval.projectDraft,
+              owner: sanitizeDisplayName(approval.projectDraft.owner, deletedUserNameSet, deletedUserIdSet),
+              coOwners: approval.projectDraft.coOwners?.map((name) => sanitizeDisplayName(name, deletedUserNameSet, deletedUserIdSet)),
+              approver: replaceDeletedNamesInText(approval.projectDraft.approver, deletedUserNames),
+            }
+          : undefined,
+        calendarEventDraft: approval.calendarEventDraft
+          ? {
+              ...approval.calendarEventDraft,
+              title: replaceDeletedNamesInText(approval.calendarEventDraft.title, deletedUserNames) ?? approval.calendarEventDraft.title,
+              attendees: approval.calendarEventDraft.attendees?.map((name) => sanitizeDisplayName(name, deletedUserNameSet, deletedUserIdSet)),
+              createdByName: sanitizeDisplayName(
+                approval.calendarEventDraft.createdByName,
+                deletedUserNameSet,
+                deletedUserIdSet,
+                approval.calendarEventDraft.createdById
+              ),
+            }
+          : undefined,
+      })),
+    [approvals, deletedUserIdSet, deletedUserNameSet, deletedUserNames]
+  );
+  const displayDocuments = useMemo(
+    () =>
+      documents.map((document) => ({
+        ...document,
+        name: replaceDeletedNamesInText(document.name, deletedUserNames) ?? document.name,
+        owner: sanitizeDisplayName(document.owner, deletedUserNameSet, deletedUserIdSet),
+      })),
+    [deletedUserIdSet, deletedUserNameSet, deletedUserNames, documents]
+  );
+  const displayAuditLog = useMemo(
+    () =>
+      auditLog.map((entry) => ({
+        ...entry,
+        user: sanitizeDisplayName(entry.user, deletedUserNameSet, deletedUserIdSet),
+        target: replaceDeletedNamesInText(entry.target, deletedUserNames) ?? entry.target,
+      })),
+    [auditLog, deletedUserIdSet, deletedUserNameSet, deletedUserNames]
+  );
+  const displayCalendarEvents = useMemo(
+    () =>
+      calendarEvents.map((event) => ({
+        ...event,
+        title: replaceDeletedNamesInText(event.title, deletedUserNames) ?? event.title,
+        attendees: event.attendees?.map((name) => sanitizeDisplayName(name, deletedUserNameSet, deletedUserIdSet)),
+        createdByName: sanitizeDisplayName(event.createdByName, deletedUserNameSet, deletedUserIdSet, event.createdById),
+      })),
+    [calendarEvents, deletedUserIdSet, deletedUserNameSet, deletedUserNames]
+  );
+  const displayChats = useMemo(
+    () =>
+      chats.map((chat) => ({
+        ...chat,
+        senderName: sanitizeDisplayName(chat.senderName, deletedUserNameSet, deletedUserIdSet, chat.senderId),
+        recipientName: sanitizeDisplayName(chat.recipientName, deletedUserNameSet, deletedUserIdSet, chat.recipientId),
+        body: replaceDeletedNamesInText(chat.body, deletedUserNames) ?? chat.body,
+      })),
+    [chats, deletedUserIdSet, deletedUserNameSet, deletedUserNames]
+  );
+  const displayTaskComments = useMemo(
+    () =>
+      taskComments.map((comment) => ({
+        ...comment,
+        authorName: sanitizeDisplayName(comment.authorName, deletedUserNameSet, deletedUserIdSet, comment.authorId),
+        body: replaceDeletedNamesInText(comment.body, deletedUserNames) ?? comment.body,
+      })),
+    [deletedUserIdSet, deletedUserNameSet, deletedUserNames, taskComments]
+  );
+
   const isTeamVisible = (team?: TeamId) => {
     if (!team) return Boolean(activeWorkspace?.isCompanyWide);
     return visibleTeams.includes(team);
@@ -1457,19 +1891,24 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const notificationsForUser =
     currentUser.notificationSettings?.enabled === false
       ? []
-      : notifications.filter(
-          (notification) =>
-            (!notification.recipientUserId || notification.recipientUserId === currentUser.id) && isTeamVisible(notification.team)
+      : displayNotifications.filter(
+          (notification) => {
+            if (notification.recipientUserId && notification.recipientUserId !== currentUser.id) return false;
+            if (isCompanyLevelUser) return true;
+            if (!notification.team) return (currentUser.workspaceIds ?? []).includes(COMPANY_WORKSPACE_ID);
+            return (currentUser.teams ?? [currentUser.team]).includes(notification.team);
+          }
         );
 
-  const filteredTasks = useMemo(() => tasks.filter((task) => isTeamVisible(task.team)), [tasks, visibleTeams, activeWorkspace?.isCompanyWide]);
-  const filteredProjects = useMemo(() => projects.filter((project) => isTeamVisible(project.team)), [projects, visibleTeams, activeWorkspace?.isCompanyWide]);
-  const filteredApprovals = useMemo(() => approvals.filter((approval) => isTeamVisible(approval.team)), [approvals, visibleTeams, activeWorkspace?.isCompanyWide]);
-  const filteredDocuments = useMemo(() => documents.filter((document) => isTeamVisible(document.team)), [documents, visibleTeams, activeWorkspace?.isCompanyWide]);
-  const filteredAuditLog = useMemo(() => auditLog.filter((entry) => isTeamVisible(entry.team)), [auditLog, visibleTeams, activeWorkspace?.isCompanyWide]);
-  const filteredCalendarEvents = useMemo(() => calendarEvents.filter((event) => isTeamVisible(event.team)), [calendarEvents, visibleTeams, activeWorkspace?.isCompanyWide]);
+  const filteredTasks = useMemo(() => displayTasks.filter((task) => isTeamVisible(task.team)), [displayTasks, visibleTeams, activeWorkspace?.isCompanyWide]);
+  const filteredProjects = useMemo(() => displayProjects.filter((project) => isTeamVisible(project.team)), [displayProjects, visibleTeams, activeWorkspace?.isCompanyWide]);
+  const filteredApprovals = useMemo(() => displayApprovals.filter((approval) => isTeamVisible(approval.team)), [displayApprovals, visibleTeams, activeWorkspace?.isCompanyWide]);
+  const filteredDocuments = useMemo(() => displayDocuments.filter((document) => isTeamVisible(document.team)), [displayDocuments, visibleTeams, activeWorkspace?.isCompanyWide]);
+  const filteredAuditLog = useMemo(() => displayAuditLog.filter((entry) => isTeamVisible(entry.team)), [displayAuditLog, visibleTeams, activeWorkspace?.isCompanyWide]);
+  const filteredCalendarEvents = useMemo(() => displayCalendarEvents.filter((event) => isTeamVisible(event.team)), [displayCalendarEvents, visibleTeams, activeWorkspace?.isCompanyWide]);
   const filteredRecycleBin = useMemo(() => recycleBin.filter((item) => isTeamVisible(item.team)), [recycleBin, visibleTeams, activeWorkspace?.isCompanyWide]);
-  const filteredChats = chats;
+  const filteredChats = displayChats;
+  const filteredTaskComments = useMemo(() => displayTaskComments.filter((entry) => isTeamVisible(entry.team)), [activeWorkspace?.isCompanyWide, displayTaskComments, visibleTeams]);
 
   const unreadChatCount = useMemo(
     () =>
@@ -1485,9 +1924,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const value = useMemo<DataCtx>(
     () => ({
       tasks: filteredTasks,
-      allTasks: tasks,
+      allTasks: displayTasks,
       projects: filteredProjects,
-      allProjects: projects,
+      allProjects: displayProjects,
       notifications: notificationsForUser,
       unreadCount: notificationsForUser.filter((notification) => !notification.read).length,
       unreadChatCount,
@@ -1496,9 +1935,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       automations,
       auditLog: filteredAuditLog,
       calendarEvents: filteredCalendarEvents,
-      allCalendarEvents: calendarEvents,
+      allCalendarEvents: displayCalendarEvents,
       recycleBin: filteredRecycleBin,
       chats: filteredChats,
+      taskComments: filteredTaskComments,
       personalNotes,
       addTask,
       updateTask,
@@ -1531,15 +1971,18 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       sendChatMessage,
       updateChatMessage,
       removeChatMessage,
+      addTaskComment,
+      toggleChatReaction,
+      toggleTaskCommentReaction,
       addPersonalNote,
       updatePersonalNote,
       removePersonalNote,
     }),
     [
       filteredTasks,
-      tasks,
+      displayTasks,
       filteredProjects,
-      projects,
+      displayProjects,
       notificationsForUser,
       unreadChatCount,
       filteredApprovals,
@@ -1547,9 +1990,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       automations,
       filteredAuditLog,
       filteredCalendarEvents,
-      calendarEvents,
+      displayCalendarEvents,
       filteredRecycleBin,
       filteredChats,
+      filteredTaskComments,
       personalNotes,
       addTask,
       updateTask,
@@ -1582,6 +2026,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       sendChatMessage,
       updateChatMessage,
       removeChatMessage,
+      addTaskComment,
+      toggleChatReaction,
+      toggleTaskCommentReaction,
       addPersonalNote,
       updatePersonalNote,
       removePersonalNote,

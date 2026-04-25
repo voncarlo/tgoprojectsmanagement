@@ -9,6 +9,8 @@ import { useData } from "@/store/DataContext";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { teams } from "@/data/mock";
+import { ReactionBar } from "@/components/portal/ReactionBar";
+import { insertMentionAtCursor, MENTION_QUERY_REGEX, renderMentionText } from "@/lib/social";
 
 interface FloatingChatProps {
   open: boolean;
@@ -17,7 +19,7 @@ interface FloatingChatProps {
 
 export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
   const { currentUser, userList } = useAuth();
-  const { chats, sendChatMessage, updateChatMessage, removeChatMessage, markChatsRead } = useData();
+  const { chats, sendChatMessage, updateChatMessage, removeChatMessage, markChatsRead, toggleChatReaction } = useData();
   const contacts = userList.filter((user) => user.id !== currentUser.id && user.status === "Active");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -27,7 +29,8 @@ export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
   const [view, setView] = useState<"chats" | "contacts">("chats");
   const [attachment, setAttachment] = useState<{ name: string; size: string; dataUrl?: string; mimeType?: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const departmentLabel = (teamId: string) => teams.find((team) => team.id === teamId)?.name ?? teamId;
+  const departmentLabel = (teamId?: string) => (teamId ? teams.find((team) => team.id === teamId)?.name ?? teamId : "Company-level access");
+  const mentionQuery = message.match(MENTION_QUERY_REGEX)?.[1]?.trim().toLowerCase() ?? "";
 
   const downloadAttachment = (name: string, dataUrl?: string) => {
     if (!dataUrl) {
@@ -44,6 +47,10 @@ export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
     const q = query.trim().toLowerCase();
     return contacts.filter((user) => q === "" || user.name.toLowerCase().includes(q) || departmentLabel(user.team).toLowerCase().includes(q));
   }, [contacts, query]);
+  const mentionSuggestions = useMemo(
+    () => (mentionQuery ? contacts.filter((user) => user.name.toLowerCase().includes(mentionQuery)).slice(0, 5) : []),
+    [contacts, mentionQuery]
+  );
 
   const launcherItems = useMemo(
     () =>
@@ -112,6 +119,8 @@ export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
     reader.readAsDataURL(file);
   };
 
+  const insertMention = (userName: string) => setMessage((current) => insertMentionAtCursor(current, userName));
+
   if (!open) return null;
 
   const panelWidth = 332;
@@ -170,7 +179,7 @@ export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
                         </div>
                       ) : (
                         <>
-                          {entry.body ? <p>{entry.body}</p> : null}
+                          {entry.body ? <p>{renderMentionText(entry.body)}</p> : null}
                           {entry.attachmentName && (
                             <button
                               type="button"
@@ -187,7 +196,7 @@ export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
                           <div className="mt-1 flex items-center justify-between gap-2">
                             <p className={cn("text-[9px]", mine ? "text-primary-foreground/75" : "text-muted-foreground")}>
                               {new Date(entry.createdAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-                              {entry.updatedAt ? " · edited" : ""}
+                              {entry.updatedAt ? " - edited" : ""}
                             </p>
                             {mine && (
                               <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
@@ -209,6 +218,13 @@ export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
                               </div>
                             )}
                           </div>
+                          <ReactionBar
+                            reactions={entry.reactions}
+                            currentUserId={currentUser.id}
+                            onToggle={(emoji) => toggleChatReaction(entry.id, emoji)}
+                            resolveUserName={(userId) => userList.find((user) => user.id === userId)?.name ?? "Unknown user"}
+                            tone={mine ? "inverted" : "default"}
+                          />
                         </>
                       )}
                     </div>
@@ -238,6 +254,21 @@ export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
                 placeholder={`Message ${selectedUser.name}...`}
                 className="min-h-[42px] resize-none border-0 px-1 py-1 text-[13px] shadow-none focus-visible:ring-0"
               />
+              {mentionSuggestions.length > 0 && (
+                <div className="mb-2 rounded-xl border border-border bg-background shadow-soft">
+                  {mentionSuggestions.map((user) => (
+                    <button
+                      key={user.id}
+                      type="button"
+                      onClick={() => insertMention(user.name)}
+                      className="flex w-full items-center justify-between px-3 py-2 text-left text-xs hover:bg-muted/40"
+                    >
+                      <span className="font-medium text-foreground">{user.name}</span>
+                      <span className="text-muted-foreground">{departmentLabel(user.team)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="flex items-center justify-between pt-1">
                 <div className="flex items-center gap-1">
                   <input ref={fileInputRef} type="file" className="hidden" onChange={pickAttachment} />

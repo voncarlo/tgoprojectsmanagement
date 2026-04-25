@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/portal/EmptyState";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useAuth } from "@/auth/AuthContext";
+import { Link } from "react-router-dom";
 
 const Notifications = () => {
   const { currentUser } = useAuth();
@@ -70,13 +71,22 @@ const Notifications = () => {
                 {n.user.split(" ").map((p) => p[0]).join("").slice(0, 2)}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm">
-                  <span className="font-medium text-foreground">{n.user}</span>{" "}
-                  <span className="text-muted-foreground">{n.action}</span>{" "}
-                  <span className="font-medium text-foreground">{n.target}</span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-sm font-medium text-foreground">{n.title ?? "Notification"}</p>
+                  <Badge variant="outline" className="text-[10px]">{n.workspaceLabel ?? "Company"}</Badge>
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">{n.preview ?? `${n.user} ${n.action} ${n.target}`}</p>
+                <p className="mt-2 text-xs text-foreground">
+                  Related item: <span className="font-medium">{n.target}</span>
                 </p>
-                <p className="text-[11px] text-muted-foreground mt-1">{n.time}</p>
+                <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+                  <span>By {n.user}</span>
+                  <span>{n.time}</span>
+                </div>
               </div>
+              <Button asChild variant="ghost" size="sm" className="shrink-0">
+                <Link to={n.link ?? "/notifications"}>Open</Link>
+              </Button>
               {!n.read && <span className="h-2 w-2 rounded-full bg-primary mt-2" />}
             </div>
           ))}

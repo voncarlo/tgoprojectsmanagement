@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/portal/PageHeader";
 import { ALL_ROLES, ROLE_MODULES } from "@/auth/permissions";
 import { RoleBadge } from "@/components/rbac/RoleBadge";
-import { COMPANY_WORKSPACE_ID } from "@/lib/workspaces";
+import { COMPANY_WORKSPACE_ID, isCompanyLevelRole } from "@/lib/workspaces";
 
 const ALL_MODULES: { id: ModuleKey; label: string }[] = [
   { id: "dashboard", label: "Dashboard" },
@@ -48,6 +48,15 @@ const emptyUser = (): User => ({
   workspaceIds: [],
 });
 
+const normalizeEditorUser = (user: User): User => {
+  if (!isCompanyLevelRole(user.role)) return user;
+  return {
+    ...user,
+    teams: [],
+    workspaceIds: [COMPANY_WORKSPACE_ID],
+  };
+};
+
 const initialsOf = (name: string) =>
   name.trim().split(/\s+/).map((n) => n[0]).slice(0, 2).join("").toUpperCase() || "··";
 
@@ -73,9 +82,11 @@ const Users = () => {
   );
 
   const upsert = (u: User) => {
-    const next = { ...u, initials: initialsOf(u.name), workspaceIds: [...new Set(u.workspaceIds ?? [])] };
-    if (next.teams.length === 0) next.teams = [next.team];
-    if (!next.teams.includes(next.team)) next.team = next.teams[0];
+    const next = normalizeEditorUser({ ...u, initials: initialsOf(u.name), workspaceIds: [...new Set(u.workspaceIds ?? [])] });
+    if (!isCompanyLevelRole(next.role)) {
+      if (next.teams.length === 0) next.teams = [next.team];
+      if (!next.teams.includes(next.team)) next.team = next.teams[0];
+    }
     const exists = userList.some((x) => x.id === u.id);
     if (!exists && editingPassword.length < 8) {
       toast.error("New users need a password with at least 8 characters.");
@@ -142,7 +153,7 @@ const Users = () => {
         title="User Management"
         description="Manage accounts, roles, departments, and module access."
         actions={
-          <Button className="gradient-primary text-primary-foreground gap-1.5" onClick={() => { setEditing(emptyUser()); setEditingPassword(""); }}>
+          <Button className="gradient-primary text-primary-foreground gap-1.5" onClick={() => { setEditing(normalizeEditorUser(emptyUser())); setEditingPassword(""); }}>
             <Plus className="h-4 w-4" /> Add user
           </Button>
         }
@@ -203,14 +214,18 @@ const Users = () => {
                   <td className="p-3"><RoleBadge role={u.role} /></td>
                   <td className="p-3">
                     <div className="flex flex-wrap gap-1 max-w-[260px]">
-                      {u.teams.map((tid) => {
-                        const t = teams.find((x) => x.id === tid)!;
-                        return (
-                          <Badge key={tid} variant="outline" className="text-[10px]" style={{ borderColor: `hsl(${t.color} / 0.3)`, color: `hsl(${t.color})` }}>
-                            {t.name}
-                          </Badge>
-                        );
-                      })}
+                      {isCompanyLevelRole(u.role) ? (
+                        <Badge variant="outline" className="text-[10px]">Company-level</Badge>
+                      ) : (
+                        u.teams.map((tid) => {
+                          const t = teams.find((x) => x.id === tid)!;
+                          return (
+                            <Badge key={tid} variant="outline" className="text-[10px]" style={{ borderColor: `hsl(${t.color} / 0.3)`, color: `hsl(${t.color})` }}>
+                              {t.name}
+                            </Badge>
+                          );
+                        })
+                      )}
                     </div>
                   </td>
                   <td className="p-3">
@@ -235,7 +250,7 @@ const Users = () => {
                   <td className="p-3 text-xs text-muted-foreground">{u.lastActive ?? "—"}</td>
                   <td className="p-3">
                     <div className="flex items-center justify-end gap-1">
-                      <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => { setEditing(u); setEditingPassword(""); }}>
+                      <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => { setEditing(normalizeEditorUser(u)); setEditingPassword(""); }}>
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
                       <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => { setResetting(u); setPwd(""); }}>
@@ -268,7 +283,11 @@ const Users = () => {
             <>
               <DialogHeader>
                 <DialogTitle>{userList.some((x) => x.id === editing.id) ? "Edit user" : "Add new user"}</DialogTitle>
-                <DialogDescription>Manage profile, role, departments and module access.</DialogDescription>
+                <DialogDescription>
+                  {isCompanyLevelRole(editing.role)
+                    ? "Company-level admins use the Torero Global Outsourcing workspace only."
+                    : "Manage profile, role, departments and module access."}
+                </DialogDescription>
               </DialogHeader>
 
               <div className="grid gap-4 py-2 md:grid-cols-2">
@@ -288,7 +307,7 @@ const Users = () => {
                   <Label>Role</Label>
                   <Select
                     value={editing.role}
-                    onValueChange={(v) => setEditing({ ...editing, role: v as Role })}
+                    onValueChange={(v) => setEditing(normalizeEditorUser({ ...editing, role: v as Role }))}
                   >
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -298,53 +317,69 @@ const Users = () => {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label>Primary department</Label>
-                  <Select
-                    value={editing.team}
-                    onValueChange={(v) => setEditing({ ...editing, team: v as TeamId })}
-                  >
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {teams.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2 md:col-span-2">
-                  <Label>Assigned departments</Label>
-                  <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 rounded-lg border border-border p-3">
-                    {teams.map((t) => {
-                      const checked = editing.teams.includes(t.id);
-                      return (
-                        <label key={t.id} className="flex items-center gap-2 text-sm cursor-pointer">
-                          <Checkbox
-                            checked={checked}
-                            onCheckedChange={(v) => {
-                              const teamsNext = v
-                                ? [...editing.teams, t.id]
-                                : editing.teams.filter((x) => x !== t.id);
-                              setEditing({ ...editing, teams: teamsNext });
-                            }}
-                          />
-                          <span className="h-2 w-2 rounded-full" style={{ background: `hsl(${t.color})` }} />
-                          {t.name}
-                        </label>
-                      );
-                    })}
+                {isCompanyLevelRole(editing.role) ? (
+                  <div className="space-y-2">
+                    <Label>Department scope</Label>
+                    <Input value="Company-level access only" disabled />
                   </div>
-                </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label>Primary department</Label>
+                    <Select
+                      value={editing.team}
+                      onValueChange={(v) => setEditing({ ...editing, team: v as TeamId })}
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {teams.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {!isCompanyLevelRole(editing.role) && (
+                  <div className="space-y-2 md:col-span-2">
+                    <Label>Assigned departments</Label>
+                    <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 rounded-lg border border-border p-3">
+                      {teams.map((t) => {
+                        const checked = editing.teams.includes(t.id);
+                        return (
+                          <label key={t.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                            <Checkbox
+                              checked={checked}
+                              onCheckedChange={(v) => {
+                                const teamsNext = v
+                                  ? [...editing.teams, t.id]
+                                  : editing.teams.filter((x) => x !== t.id);
+                                setEditing({ ...editing, teams: teamsNext });
+                              }}
+                            />
+                            <span className="h-2 w-2 rounded-full" style={{ background: `hsl(${t.color})` }} />
+                            {t.name}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 <div className="space-y-2 md:col-span-2">
                   <Label>Workspace access</Label>
                   <div className="grid gap-2 rounded-lg border border-border p-3">
                     {workspaces.map((workspace) => {
                       const checked = (editing.workspaceIds ?? []).includes(workspace.id);
+                      const companyLevelUser = isCompanyLevelRole(editing.role);
+                      const disabled = companyLevelUser ? workspace.id !== COMPANY_WORKSPACE_ID : false;
                       return (
                         <label key={workspace.id} className="flex items-start gap-3 rounded-lg border border-border/60 px-3 py-2 text-sm cursor-pointer">
                           <Checkbox
                             checked={checked}
+                            disabled={disabled}
                             onCheckedChange={(value) => {
+                              if (companyLevelUser) {
+                                setEditing({ ...editing, workspaceIds: [COMPANY_WORKSPACE_ID] });
+                                return;
+                              }
                               const nextWorkspaceIds = value
                                 ? [...new Set([...(editing.workspaceIds ?? []), workspace.id])]
                                 : (editing.workspaceIds ?? []).filter((id) => id !== workspace.id);

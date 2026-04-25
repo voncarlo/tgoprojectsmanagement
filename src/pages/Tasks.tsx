@@ -21,6 +21,8 @@ import { QuickAddDialog } from "@/components/portal/QuickAddDialog";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/portal/PageHeader";
 import { TeamIcon } from "@/components/portal/TeamIcon";
+import { ReactionBar } from "@/components/portal/ReactionBar";
+import { insertMentionAtCursor, MENTION_QUERY_REGEX, renderMentionText } from "@/lib/social";
 
 const STATUSES: TaskStatus[] = ["Not Started", "In Progress", "Waiting Review", "On Hold", "Blocked", "Completed"];
 const PRIORITIES: Priority[] = ["Low", "Medium", "High", "Urgent", "Critical"];
@@ -61,11 +63,9 @@ const canMoveTaskToStatus = (task: Task, status: TaskStatus, options: { canEditT
   if (status === "Completed") return options.canMarkCompleted;
   return true;
 };
-const MENTION_QUERY_REGEX = /(?:^|\s)@([a-zA-Z][a-zA-Z\s]*)$/;
-
 const Tasks = () => {
   const { visibleTeams, currentUser, can, userList } = useAuth();
-  const { tasks, updateTask, removeTask, addTask, decideTaskApproval, addTaskApprovalComment, pushNotification, pushActivity } = useData();
+  const { tasks, taskComments, updateTask, removeTask, addTask, decideTaskApproval, addTaskApprovalComment, addTaskComment, toggleTaskCommentReaction } = useData();
   const { isManager } = useAuth();
   const teamsVisible = teams.filter((t) => visibleTeams.includes(t.id));
   const canDeleteTask = can("task.delete");
@@ -87,6 +87,18 @@ const Tasks = () => {
     : [];
 
   const visible = useMemo(() => tasks.filter((t) => visibleTeams.includes(t.team)), [tasks, visibleTeams]);
+  const commentCountByTask = useMemo(
+    () =>
+      taskComments.reduce<Record<string, number>>((acc, entry) => {
+        acc[entry.taskId] = (acc[entry.taskId] ?? 0) + 1;
+        return acc;
+      }, {}),
+    [taskComments]
+  );
+  const openComments = useMemo(
+    () => (open ? taskComments.filter((entry) => entry.taskId === open.id) : []),
+    [open, taskComments]
+  );
 
   const filtered = useMemo(() => visible.filter((t) =>
     (q === "" || t.title.toLowerCase().includes(q.toLowerCase()) || t.assignee.toLowerCase().includes(q.toLowerCase()))
@@ -117,7 +129,11 @@ const Tasks = () => {
       toast.error("Only managers, admins, and super admins can mark tasks as completed.");
       return;
     }
-    const teamId = (activeTeams[0] as TeamId) || currentUser.team;
+    const teamId = (activeTeams[0] as TeamId) || teamsVisible[0]?.id;
+    if (!teamId) {
+      toast.error("No department is available for this task.");
+      return;
+    }
     const createdTask = addTask({
       title,
       assignedBy: currentUser.name,
@@ -157,27 +173,13 @@ const Tasks = () => {
 
   const submitComment = () => {
     if (!comment.trim() || !open) return;
-    const mentionedUsers = userList.filter(
-      (user) => user.id !== currentUser.id && comment.toLowerCase().includes(`@${user.name.toLowerCase()}`)
-    );
-    mentionedUsers.forEach((user) => {
-      pushNotification({
-        user: currentUser.name,
-        action: "mentioned you in a comment on",
-        target: open.title,
-        recipientUserId: user.id,
-      });
-    });
-    pushActivity({ user: currentUser.name, action: "commented on", target: open.title });
+    addTaskComment(open.id, comment);
     toast.success("Comment posted");
     setComment("");
   };
 
   const insertMention = (userName: string) => {
-    setComment((current) => current.replace(MENTION_QUERY_REGEX, (match, query, offset) => {
-      const prefix = offset > 0 && current[offset - 1] === " " ? " " : match.startsWith(" ") ? " " : "";
-      return `${prefix}@${userName} `;
-    }));
+    setComment((current) => insertMentionAtCursor(current, userName));
   };
 
   return (
@@ -445,7 +447,7 @@ const Tasks = () => {
                     </div>
                     <div className={cn("flex items-center gap-3 text-xs", overdue ? "text-destructive font-medium" : "text-muted-foreground")}>
                       <span className="flex items-center gap-1"><CalendarIcon className="h-3 w-3" />{dueLabel(t.due)}</span>
-                      <span className="flex items-center gap-1"><MessageSquare className="h-3 w-3" />0</span>
+                      <span className="flex items-center gap-1"><MessageSquare className="h-3 w-3" />{commentCountByTask[t.id] ?? 0}</span>
                     </div>
                   </div>
                 </Card>
@@ -572,6 +574,37 @@ const Tasks = () => {
                   />
                 )}
 
+                <div className="space-y-3 rounded-2xl border border-border bg-muted/20 p-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Comments</p>
+                    <span className="text-[11px] text-muted-foreground">{openComments.length}</span>
+                  </div>
+                  {openComments.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">No comments yet. Start the thread below.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {openComments.map((entry) => (
+                        <div key={entry.id} className="rounded-xl border border-border bg-background/80 p-3">
+                          <div className="flex items-center gap-2">
+                            <Avatar className="h-7 w-7"><AvatarFallback className="text-[9px] bg-primary/10 text-primary">{initials(entry.authorName)}</AvatarFallback></Avatar>
+                            <div>
+                              <p className="text-xs font-medium">{entry.authorName}</p>
+                              <p className="text-[11px] text-muted-foreground">{new Date(entry.createdAt).toLocaleString()}</p>
+                            </div>
+                          </div>
+                          <p className="mt-2 text-xs leading-6 text-foreground">{renderMentionText(entry.body)}</p>
+                          <ReactionBar
+                            reactions={entry.reactions}
+                            currentUserId={currentUser.id}
+                            onToggle={(emoji) => toggleTaskCommentReaction(entry.id, emoji)}
+                            resolveUserName={(userId) => userList.find((user) => user.id === userId)?.name ?? "Unknown user"}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <div className="flex items-center gap-2">
                   <Avatar className="h-7 w-7"><AvatarFallback className="text-[9px] bg-primary text-primary-foreground">{currentUser.initials}</AvatarFallback></Avatar>
                   <div className="relative flex-1">
@@ -592,7 +625,7 @@ const Tasks = () => {
                             className="flex w-full items-center justify-between px-3 py-2 text-left text-xs hover:bg-muted/40"
                           >
                             <span className="font-medium text-foreground">{user.name}</span>
-                            <span className="text-muted-foreground">{teams.find((team) => team.id === user.team)?.name ?? user.team}</span>
+                            <span className="text-muted-foreground">{user.teams.length === 0 ? "Company-level access" : teams.find((team) => team.id === user.team)?.name ?? user.team}</span>
                           </button>
                         ))}
                       </div>

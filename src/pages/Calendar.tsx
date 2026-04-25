@@ -15,9 +15,10 @@ import { useAuth } from "@/auth/AuthContext";
 import { useData } from "@/store/DataContext";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { toast } from "sonner";
+import { COMPANY_WORKSPACE_ID, isCompanyLevelRole } from "@/lib/workspaces";
 
 const EVENT_TYPES: CalendarEventType[] = ["PTO", "Call-out", "Meeting", "Event", "Deadline", "Birthday", "Anniversary", "Training", "Announcement"];
-type CalendarScope = "company" | "workspace";
+type CalendarScope = "company" | string;
 
 const TYPE_TONE: Record<CalendarEvent["type"], string> = {
   PTO: "bg-warning/10 text-warning border-warning/20",
@@ -47,7 +48,7 @@ const startOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(
 const daysInMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
 
 const Calendar = () => {
-  const { visibleTeams, currentUser, isManager, isAdmin, isSuperAdmin, activeWorkspace } = useAuth();
+  const { visibleTeams, currentUser, isManager, isAdmin, isSuperAdmin, workspaces, accessibleWorkspaces } = useAuth();
   const isMobile = useIsMobile();
   const data = useData();
   const {
@@ -61,7 +62,19 @@ const Calendar = () => {
   const [cursor, setCursor] = useState(new Date());
   const [view, setView] = useState<"month" | "week" | "agenda">("month");
   const [filterType, setFilterType] = useState<CalendarEvent["type"] | "all">("all");
-  const [scope, setScope] = useState<CalendarScope>("workspace");
+  const departmentCalendarOptions = useMemo(() => {
+    const sourceWorkspaces = isCompanyLevelRole(currentUser.role)
+      ? workspaces.filter((workspace) => workspace.id !== COMPANY_WORKSPACE_ID && workspace.kind === "department")
+      : accessibleWorkspaces.filter((workspace) => workspace.kind === "department");
+
+    return sourceWorkspaces.map((workspace) => ({
+      key: workspace.id,
+      label: `${workspace.name} Calendar`,
+      teamIds: workspace.teamIds,
+    }));
+  }, [accessibleWorkspaces, currentUser.role, workspaces]);
+  const defaultScope = departmentCalendarOptions[0]?.key ?? "company";
+  const [scope, setScope] = useState<CalendarScope>(defaultScope);
   const [open, setOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [title, setTitle] = useState("");
@@ -74,12 +87,21 @@ const Calendar = () => {
     [allCalendarEvents, filterType]
   );
 
-  const workspaceEvents = useMemo(
-    () => calendarEvents.filter((event) => event.team && visibleTeams.includes(event.team) && (filterType === "all" || event.type === filterType)),
-    [calendarEvents, filterType, visibleTeams]
-  );
+  const workspaceEvents = useMemo(() => {
+    const selectedWorkspace = departmentCalendarOptions.find((option) => option.key === scope);
+    const teamIds = selectedWorkspace?.teamIds ?? visibleTeams;
+    return calendarEvents.filter(
+      (event) => event.team && teamIds.includes(event.team) && (filterType === "all" || event.type === filterType)
+    );
+  }, [calendarEvents, departmentCalendarOptions, filterType, scope, visibleTeams]);
 
   const events = scope === "company" ? companyEvents : workspaceEvents;
+
+  useEffect(() => {
+    if (scope === "company") return;
+    if (departmentCalendarOptions.some((option) => option.key === scope)) return;
+    setScope(defaultScope);
+  }, [defaultScope, departmentCalendarOptions, scope]);
 
   const pendingPtoRequests = useMemo(
     () =>
@@ -187,10 +209,7 @@ const Calendar = () => {
           </div>
 
           <div className="flex w-full items-center gap-1 rounded-lg bg-muted/50 p-1 sm:w-auto">
-            {([
-              { key: "workspace", label: activeWorkspace?.shortName ? `${activeWorkspace.shortName} Calendar` : "Team Calendar" },
-              { key: "company", label: "Company Calendar" },
-            ] as const).map((option) => (
+            {[{ key: "company", label: "Company Calendar" }, ...departmentCalendarOptions].map((option) => (
               <button
                 key={option.key}
                 onClick={() => setScope(option.key)}

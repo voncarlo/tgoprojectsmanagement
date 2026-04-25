@@ -30,7 +30,7 @@ export const QuickAddDialog = ({ open, onOpenChange, defaultTab = "task", defaul
   const { currentUser, visibleTeams, userList, can } = useAuth();
   const { addTask, addProject } = useData();
   const teamsAvailable = teams.filter((team) => visibleTeams.includes(team.id));
-  const initialTeam = defaultTeam ?? (teamsAvailable[0]?.id ?? currentUser.team);
+  const initialTeam = defaultTeam ?? (teamsAvailable[0]?.id ?? "projects");
   const canCreateProjectDirectly = can("project.create");
   const creatorNeedsApproval = currentUser.role === "Staff";
 

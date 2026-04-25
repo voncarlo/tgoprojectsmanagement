@@ -12,9 +12,9 @@ import { useAuth } from "@/auth/AuthContext";
 import { cn } from "@/lib/utils";
 
 export const WorkspaceSwitcher = ({ compact = false, className }: { compact?: boolean; className?: string }) => {
-  const { activeWorkspace, accessibleWorkspaces, setActiveWorkspaceId } = useAuth();
+  const { activeWorkspace, accessibleWorkspaces, isAdmin, setActiveWorkspaceId } = useAuth();
 
-  if (!activeWorkspace) return null;
+  if (!activeWorkspace || isAdmin || accessibleWorkspaces.length <= 1) return null;
 
   return (
     <DropdownMenu>

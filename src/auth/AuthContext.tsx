@@ -6,6 +6,7 @@ import {
   DEFAULT_WORKSPACES,
   type Workspace,
   getDefaultWorkspaceIdsForUser,
+  isCompanyLevelRole,
   normalizeWorkspaceList,
   resolveWorkspaceTeams,
 } from "@/lib/workspaces";
@@ -32,6 +33,7 @@ interface AuthCtx {
   resetPasswordForEmail: (email: string) => Promise<{ ok: boolean; message?: string }>;
   rememberedEmail: string;
   deleteUser: (userId: string) => void;
+  deletedUsers: DeletedUserRecord[];
   workspaces: Workspace[];
   accessibleWorkspaces: Workspace[];
   activeWorkspace: Workspace | null;
@@ -47,7 +49,14 @@ interface PersistedAuthState {
   passwords: Record<string, string>;
   userList: User[];
   sessionLogs: SessionLogEntry[];
+  deletedUsers?: DeletedUserRecord[];
   workspaces: Workspace[];
+}
+
+interface DeletedUserRecord {
+  id: string;
+  name: string;
+  email: string;
 }
 
 export interface SessionLogEntry {
@@ -78,7 +87,7 @@ const STORAGE_KEY = "tgo.auth";
 const CURRENT_USER_STORAGE_KEY = "tgo.auth.currentUserId";
 const REMEMBER_EMAIL_KEY = "tgo.auth.rememberedEmail";
 const ACTIVE_WORKSPACE_STORAGE_KEY = "tgo.auth.activeWorkspaceByUser";
-const STORAGE_VERSION = 8;
+const STORAGE_VERSION = 9;
 const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   enabled: true,
   digest: true,
@@ -104,9 +113,10 @@ const normalizeUser = (user: User, workspaces: Workspace[]): User => {
   const role = VALID_ROLES.has(user.role) ? user.role : FALLBACK_ROLE;
   const seedMatch = seedUsers.find((item) => item.id === user.id || item.email.toLowerCase() === user.email.toLowerCase());
   const primaryTeam = ALL_TEAMS.includes(user.team) ? user.team : (seedMatch?.team ?? "projects");
-  const teamList = unique(
-    (user.teams?.filter((team): team is TeamId => ALL_TEAMS.includes(team)) ?? []).concat(primaryTeam)
-  );
+  const isCompanyLevelUser = isCompanyLevelRole(role);
+  const teamList = isCompanyLevelUser
+    ? []
+    : unique((user.teams?.filter((team): team is TeamId => ALL_TEAMS.includes(team)) ?? []).concat(primaryTeam));
   const modulesSource = user.modules?.length ? user.modules : (seedMatch?.modules ?? ROLE_MODULES[role]);
   const baseUser: User = {
     ...seedMatch,
@@ -146,6 +156,7 @@ const getDefaultCurrentUserId = (users: User[]) => users[0]?.id ?? seedUsers[0].
 
 const chooseDefaultWorkspaceId = (user: User | undefined, accessibleWorkspaces: Workspace[]) => {
   if (!user || accessibleWorkspaces.length === 0) return "";
+  if (isCompanyLevelRole(user.role)) return COMPANY_WORKSPACE_ID;
   const matchingDepartmentWorkspace = accessibleWorkspaces.find(
     (workspace) => workspace.kind === "department" && workspace.teamIds.includes(user.team)
   );
@@ -174,6 +185,7 @@ const defaultAuthState: PersistedAuthState = {
   passwords: defaultPasswords,
   userList: seedUsers.map((user) => normalizeUser(user, DEFAULT_WORKSPACES)),
   sessionLogs: [],
+  deletedUsers: [],
   workspaces: DEFAULT_WORKSPACES,
 };
 
@@ -189,6 +201,7 @@ const loadAuthState = (): PersistedAuthState => {
       passwords: { ...defaultPasswords, ...(parsed.passwords ?? {}) },
       userList: mergeUsers(parsed.userList, workspaces),
       sessionLogs: parsed.sessionLogs ?? defaultAuthState.sessionLogs,
+      deletedUsers: parsed.deletedUsers ?? defaultAuthState.deletedUsers,
       workspaces,
     };
   } catch {
@@ -218,6 +231,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [currentUserId, setCurrentUserId] = useState<string>(() => loadLocalCurrentUserId(initialState.userList));
   const [passwords, setPasswords] = useState<Record<string, string>>(initialState.passwords);
   const [sessionLogs, setSessionLogs] = useState<SessionLogEntry[]>(initialState.sessionLogs);
+  const [deletedUsers, setDeletedUsers] = useState<DeletedUserRecord[]>(initialState.deletedUsers ?? []);
   const [serverHydrated, setServerHydrated] = useState(false);
   const [rememberedEmail, setRememberedEmail] = useState<string>(() => {
     if (typeof window === "undefined") return "";
@@ -262,10 +276,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         passwords,
         userList,
         sessionLogs,
+        deletedUsers,
         workspaces,
       } satisfies PersistedAuthState)
     );
-  }, [passwords, sessionLogs, userList, workspaces]);
+  }, [deletedUsers, passwords, sessionLogs, userList, workspaces]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -284,6 +299,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUserListState(mergeUsers(remoteState.userList, nextWorkspaces));
         setPasswords({ ...defaultPasswords, ...(remoteState.passwords ?? {}) });
         setSessionLogs(remoteState.sessionLogs ?? defaultAuthState.sessionLogs);
+        setDeletedUsers(remoteState.deletedUsers ?? defaultAuthState.deletedUsers ?? []);
       } catch {
         // Fallback to local storage state when the API is unavailable.
       } finally {
@@ -304,9 +320,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       passwords,
       userList,
       sessionLogs,
+      deletedUsers,
       workspaces,
     });
-  }, [passwords, serverHydrated, sessionLogs, userList, workspaces]);
+  }, [deletedUsers, passwords, serverHydrated, sessionLogs, userList, workspaces]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -319,9 +336,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const currentUser = userList.find((user) => user.id === currentUserId) ?? userList[0] ?? defaultAuthState.userList[0];
   const isSuperAdmin = currentUser.role === "Super Admin";
-  const accessibleWorkspaces = isSuperAdmin
-    ? workspaces
-    : workspaces.filter((workspace) => (currentUser.workspaceIds ?? []).includes(workspace.id));
+  const accessibleWorkspaces = workspaces.filter((workspace) => (currentUser.workspaceIds ?? []).includes(workspace.id));
   const activeWorkspaceId = activeWorkspaceByUser[currentUser.id] ?? chooseDefaultWorkspaceId(currentUser, accessibleWorkspaces);
   const activeWorkspace =
     accessibleWorkspaces.find((workspace) => workspace.id === activeWorkspaceId) ??
@@ -356,7 +371,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const setUserList = (nextUsers: User[]) => {
-    setUserListState(nextUsers.map((user) => normalizeUser(user, workspaces)));
+    const normalizedUsers = nextUsers.map((user) => normalizeUser(user, workspaces));
+    setUserListState(normalizedUsers);
+    setDeletedUsers((prev) =>
+      prev.filter(
+        (deletedUser) =>
+          !normalizedUsers.some(
+            (user) => user.id === deletedUser.id || user.email.toLowerCase() === deletedUser.email.toLowerCase()
+          )
+      )
+    );
   };
 
   const upsertWorkspace = (workspace: Workspace) => {
@@ -390,6 +414,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const exists = userList.some((item) => item.id === user.id);
       setUserListState((prev) =>
         exists ? prev.map((item) => (item.id === normalized.id ? normalized : item)) : [...prev, normalized]
+      );
+      setDeletedUsers((prev) =>
+        prev.filter(
+          (deletedUser) =>
+            deletedUser.id !== normalized.id && deletedUser.email.toLowerCase() !== normalized.email.toLowerCase()
+        )
       );
       setCurrentUserId(user.id);
     },
@@ -444,7 +474,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     resetPasswordForEmail: async (email) => requestPasswordReset(email),
     rememberedEmail,
     deleteUser: (userId) => {
+      const userToDelete = userList.find((user) => user.id === userId);
       setUserListState((prev) => prev.filter((user) => user.id !== userId));
+      if (userToDelete) {
+        setDeletedUsers((prev) => {
+          if (prev.some((entry) => entry.id === userToDelete.id)) return prev;
+          return [...prev, { id: userToDelete.id, name: userToDelete.name, email: userToDelete.email }];
+        });
+      }
       setPasswords((prev) => {
         const next = { ...prev };
         delete next[userId];
@@ -459,16 +496,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setCurrentUserId(getDefaultCurrentUserId(userList.filter((user) => user.id !== userId)));
       }
     },
+    deletedUsers,
     workspaces,
     accessibleWorkspaces,
     activeWorkspace,
     activeWorkspaceId: activeWorkspace?.id ?? "",
     setActiveWorkspaceId: (workspaceId) => {
-      if (!isSuperAdmin && !(currentUser.workspaceIds ?? []).includes(workspaceId)) return;
+      if (!(currentUser.workspaceIds ?? []).includes(workspaceId)) return;
       if (!workspaces.some((workspace) => workspace.id === workspaceId)) return;
       setActiveWorkspaceByUser((prev) => ({ ...prev, [currentUser.id]: workspaceId }));
     },
-    canAccessWorkspace: (workspaceId) => isSuperAdmin || (currentUser.workspaceIds ?? []).includes(workspaceId),
+    canAccessWorkspace: (workspaceId) => (currentUser.workspaceIds ?? []).includes(workspaceId),
     upsertWorkspace,
     deleteWorkspace,
   }), [
@@ -477,6 +515,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     capabilities,
     currentUser,
     currentUserId,
+    deletedUsers,
     isSuperAdmin,
     passwords,
     rememberedEmail,
@@ -529,6 +568,7 @@ export const useAuth = (): AuthCtx => {
     resetPasswordForEmail: async () => ({ ok: false, message: "Authentication unavailable." }),
     rememberedEmail: "",
     deleteUser: () => {},
+    deletedUsers: [],
     workspaces: DEFAULT_WORKSPACES,
     accessibleWorkspaces: [],
     activeWorkspace: null,

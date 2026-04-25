@@ -13,7 +13,7 @@ const PIPELINE = [
   { name: "Northwind Logistics", stage: "Negotiation", value: 132000, prob: 85, owner: "Von Carlo" },
   { name: "Globex Inc.", stage: "Discovery", value: 56000, prob: 30, owner: "Daniel Park" },
   { name: "Initech LLC", stage: "Proposal", value: 41000, prob: 60, owner: "Von Carlo" },
-  { name: "Stark Industries", stage: "Closing", value: 220000, prob: 92, owner: "James Steffan" },
+  { name: "Stark Industries", stage: "Closing", value: 220000, prob: 92, owner: "Maria Santos" },
 ];
 
 const STAGE_TONE: Record<string, string> = {
@@ -69,7 +69,7 @@ const Sales = () => {
             {[
               { name: "Von Carlo Asinas", pct: 92 },
               { name: "Daniel Park", pct: 71 },
-              { name: "James Steffan", pct: 58 },
+              { name: "Maria Santos", pct: 58 },
             ].map((q) => (
               <div key={q.name}>
                 <div className="flex items-center justify-between text-xs mb-1"><span>{q.name}</span><span className={cn("font-medium", q.pct >= 90 ? "text-success" : q.pct >= 60 ? "text-info" : "text-warning")}>{q.pct}%</span></div>

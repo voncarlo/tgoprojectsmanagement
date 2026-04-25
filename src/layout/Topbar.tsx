@@ -54,10 +54,10 @@ export const Topbar = () => {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const meta = titles[pathname] ?? titles["/dashboard"];
-  const { currentUser, signOut, activeWorkspace } = useAuth();
+  const { currentUser, signOut, activeWorkspace, isAdmin } = useAuth();
   const { notifications, unreadCount, markAllRead, clearNotifications } = useData();
   const { theme, toggleTheme } = useTheme();
-  const team = teams.find((item) => item.id === currentUser.team)?.name ?? currentUser.team;
+  const team = isAdmin ? "Company-level access" : teams.find((item) => item.id === currentUser.team)?.name ?? currentUser.team;
   const [quickOpen, setQuickOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);

@@ -35,7 +35,7 @@ const Documents = () => {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [category, setCategory] = useState<DocumentFile["category"]>("Project");
-  const [teamId, setTeamId] = useState(visibleTeams[0] ?? currentUser.team);
+  const [teamId, setTeamId] = useState(visibleTeams[0] ?? "projects");
   const [size, setSize] = useState("250 KB");
   const [fileDataUrl, setFileDataUrl] = useState("");
   const [fileMimeType, setFileMimeType] = useState("");
@@ -67,7 +67,7 @@ const Documents = () => {
     });
     setName("");
     setCategory("Project");
-    setTeamId(visibleTeams[0] ?? currentUser.team);
+    setTeamId(visibleTeams[0] ?? "projects");
     setSize("250 KB");
     setFileDataUrl("");
     setFileMimeType("");

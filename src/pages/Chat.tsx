@@ -11,10 +11,12 @@ import { useData } from "@/store/DataContext";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { teams } from "@/data/mock";
+import { ReactionBar } from "@/components/portal/ReactionBar";
+import { insertMentionAtCursor, MENTION_QUERY_REGEX, renderMentionText } from "@/lib/social";
 
 const Chat = () => {
   const { currentUser, userList } = useAuth();
-  const { chats, sendChatMessage, updateChatMessage, removeChatMessage, markChatsRead } = useData();
+  const { chats, sendChatMessage, updateChatMessage, removeChatMessage, markChatsRead, toggleChatReaction } = useData();
   const contacts = userList.filter((user) => user.id !== currentUser.id && user.status === "Active");
   const [selectedId, setSelectedId] = useState(contacts[0]?.id ?? "");
   const [message, setMessage] = useState("");
@@ -22,7 +24,11 @@ const Chat = () => {
   const [editingBody, setEditingBody] = useState("");
   const [attachment, setAttachment] = useState<{ name: string; size: string; dataUrl?: string; mimeType?: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const departmentLabel = (teamId: string) => teams.find((team) => team.id === teamId)?.name ?? teamId;
+  const departmentLabel = (teamId?: string) => (teamId ? teams.find((team) => team.id === teamId)?.name ?? teamId : "Company-level access");
+  const mentionQuery = message.match(MENTION_QUERY_REGEX)?.[1]?.trim().toLowerCase() ?? "";
+  const mentionSuggestions = mentionQuery
+    ? contacts.filter((user) => user.name.toLowerCase().includes(mentionQuery)).slice(0, 5)
+    : [];
 
   const downloadAttachment = (name: string, dataUrl?: string) => {
     if (!dataUrl) {
@@ -90,6 +96,8 @@ const Chat = () => {
     reader.readAsDataURL(file);
   };
 
+  const insertMention = (userName: string) => setMessage((current) => insertMentionAtCursor(current, userName));
+
   return (
     <div className="space-y-6">
       <PageHeader title="Chat" description="Send quick updates and follow-ups to anyone in the portal." />
@@ -156,7 +164,7 @@ const Chat = () => {
                           </div>
                         ) : (
                           <>
-                            {entry.body ? <p>{entry.body}</p> : null}
+                            {entry.body ? <p>{renderMentionText(entry.body)}</p> : null}
                             {entry.attachmentName && (
                               <button
                                 type="button"
@@ -173,7 +181,7 @@ const Chat = () => {
                             <div className="mt-1.5 flex items-center justify-between gap-3">
                               <p className={cn("text-[10px]", mine ? "text-primary-foreground/80" : "text-muted-foreground")}>
                                 {new Date(entry.createdAt).toLocaleString()}
-                                {entry.updatedAt ? " · edited" : ""}
+                                {entry.updatedAt ? " - edited" : ""}
                               </p>
                               {mine && (
                                 <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
@@ -195,6 +203,13 @@ const Chat = () => {
                                 </div>
                               )}
                             </div>
+                            <ReactionBar
+                              reactions={entry.reactions}
+                              currentUserId={currentUser.id}
+                              onToggle={(emoji) => toggleChatReaction(entry.id, emoji)}
+                              resolveUserName={(userId) => userList.find((user) => user.id === userId)?.name ?? "Unknown user"}
+                              tone={mine ? "inverted" : "default"}
+                            />
                           </>
                         )}
                       </div>
@@ -224,6 +239,21 @@ const Chat = () => {
                   placeholder={`Message ${selectedUser?.name ?? "teammate"}...`}
                   className="min-h-[44px] resize-none border-0 px-1 py-1 text-[13px] shadow-none focus-visible:ring-0"
                 />
+                {mentionSuggestions.length > 0 && (
+                  <div className="mb-2 rounded-xl border border-border bg-background shadow-soft">
+                    {mentionSuggestions.map((user) => (
+                      <button
+                        key={user.id}
+                        type="button"
+                        onClick={() => insertMention(user.name)}
+                        className="flex w-full items-center justify-between px-3 py-2 text-left text-xs hover:bg-muted/40"
+                      >
+                        <span className="font-medium text-foreground">{user.name}</span>
+                        <span className="text-muted-foreground">{departmentLabel(user.team)}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <div className="flex items-center justify-between pt-1">
                   <div className="flex items-center gap-1">
                     <input ref={fileInputRef} type="file" className="hidden" onChange={pickAttachment} />

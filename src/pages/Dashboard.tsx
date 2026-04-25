@@ -40,7 +40,9 @@ const Dashboard = () => {
   const { tasks, projects, notifications, approvals } = useData();
   const role = currentUser.role;
   const isExecutive = role === "Super Admin" || role === "Admin";
-  const primaryDepartment = activeWorkspace?.name ?? teams.find((team) => team.id === currentUser.team)?.name ?? currentUser.team;
+  const primaryDepartment = isExecutive
+    ? "Torero Global Outsourcing"
+    : activeWorkspace?.name ?? teams.find((team) => team.id === currentUser.team)?.name ?? currentUser.team;
   const myTasks = tasks.filter(t => visibleTeams.includes(t.team));
   const myProjects = projects.filter(p => visibleTeams.includes(p.team));
   const teamWorkload = teams

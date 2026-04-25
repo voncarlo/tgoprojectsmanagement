@@ -182,7 +182,7 @@ const Settings = () => {
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2"><Label>Full name</Label><Input value={name} onChange={(e) => setName(e.target.value)} /></div>
             <div className="space-y-2"><Label>Email</Label><Input value={email} onChange={(e) => setEmail(e.target.value)} /></div>
-            <div className="space-y-2"><Label>Primary department</Label><Input defaultValue={teams.find((t) => t.id === currentUser.team)?.name ?? ""} disabled /></div>
+            <div className="space-y-2"><Label>Primary department</Label><Input defaultValue={isAdmin ? "Company-level access" : teams.find((t) => t.id === currentUser.team)?.name ?? ""} disabled /></div>
             <div className="space-y-2"><Label>Role</Label><Input defaultValue={currentUser.role} disabled /></div>
           </div>
           <div className="flex justify-end mt-5"><Button className="gradient-primary text-primary-foreground" onClick={saveProfile}>Save changes</Button></div>

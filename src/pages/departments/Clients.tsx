@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 const ACCOUNTS = [
   { name: "Acme Corp", health: "Healthy", arr: 142000, owner: "Von Carlo", lastTouch: "2d ago" },
   { name: "Northwind Logistics", health: "At Risk", arr: 88000, owner: "Daniel Park", lastTouch: "9d ago" },
-  { name: "Stark Industries", health: "Healthy", arr: 320000, owner: "James Steffan", lastTouch: "Yesterday" },
+  { name: "Stark Industries", health: "Healthy", arr: 320000, owner: "Maria Santos", lastTouch: "Yesterday" },
   { name: "Globex Inc.", health: "Healthy", arr: 56000, owner: "Von Carlo", lastTouch: "1w ago" },
   { name: "Initech LLC", health: "Churn risk", arr: 41000, owner: "Daniel Park", lastTouch: "3w ago" },
 ];

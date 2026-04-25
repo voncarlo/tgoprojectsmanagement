@@ -93,7 +93,7 @@ const Workload = () => {
         <h3 className="font-semibold mb-4">Per-person workload</h3>
         <div className="space-y-3">
           {perUser.map((p) => {
-            const team = teams.find((t) => t.id === p.user.team)!;
+            const team = teams.find((t) => t.id === p.user.team);
             const tone = p.load > 100 ? "text-destructive" : p.load > 80 ? "text-warning" : "text-success";
             return (
               <div key={p.user.id} className="flex items-center gap-4">
@@ -101,7 +101,10 @@ const Workload = () => {
                   <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-semibold text-primary">{p.user.initials}</div>
                   <div className="min-w-0">
                     <p className="text-xs font-medium truncate">{p.user.name}</p>
-                    <p className="text-[10px] text-muted-foreground flex items-center gap-1"><TeamIcon team={team.id} size={10} /> {team.name}</p>
+                    <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                      {team ? <TeamIcon team={team.id} size={10} /> : null}
+                      {team?.name ?? "Company-level access"}
+                    </p>
                   </div>
                 </div>
                 <div className="flex-1">

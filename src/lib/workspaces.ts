@@ -15,6 +15,8 @@ export interface Workspace {
 
 export const COMPANY_WORKSPACE_ID = "torero-global-outsourcing";
 
+export const isCompanyLevelRole = (role: User["role"]) => role === "Super Admin" || role === "Admin";
+
 export const DEFAULT_WORKSPACES: Workspace[] = [
   {
     id: "recruitment",
@@ -126,7 +128,9 @@ export const getDefaultWorkspaceIdsForTeams = (teams: TeamId[]) =>
   ).map((workspace) => workspace.id);
 
 export const getDefaultWorkspaceIdsForUser = (user: Pick<User, "role" | "teams" | "team" | "workspaceIds">, workspaces: Workspace[]) => {
-  if (user.role === "Super Admin") return workspaces.map((workspace) => workspace.id);
+  if (isCompanyLevelRole(user.role)) {
+    return workspaces.some((workspace) => workspace.id === COMPANY_WORKSPACE_ID) ? [COMPANY_WORKSPACE_ID] : [];
+  }
 
   const departmentWorkspaceIds = getDefaultWorkspaceIdsForTeams(
     uniq([...(user.teams ?? []), user.team].filter(Boolean) as TeamId[])
