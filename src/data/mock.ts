@@ -317,6 +317,12 @@ export interface Approval {
   submitted: string;
   notes?: string;
   requestedById?: string;
+  itemType?: "task" | "project" | "event" | "approval";
+  itemId?: string;
+  departmentId?: TeamId;
+  approverIds?: string[];
+  approvedBy?: string;
+  rejectedBy?: string;
   taskDraft?: Omit<Task, "id">;
   projectDraft?: Omit<Project, "id">;
   calendarEventDraft?: Omit<CalendarEvent, "id">;

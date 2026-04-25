@@ -69,6 +69,57 @@ const mapProjectRow = (row) => ({
   subtasks: parseJson(row.subtasks_json, []),
 });
 
+const mapApprovalRow = (row) => ({
+  id: row.id,
+  type: row.type,
+  title: row.title,
+  requester: row.requester,
+  requestedById: row.requested_by_id ?? undefined,
+  team: row.team,
+  status: row.status,
+  hidden: Boolean(row.hidden),
+  taskId: row.task_id ?? undefined,
+  projectId: row.project_id ?? undefined,
+  amount: row.amount == null ? undefined : Number(row.amount),
+  submitted: row.submitted_at,
+  notes: row.notes ?? undefined,
+  itemType: row.item_type ?? undefined,
+  itemId: row.item_id ?? undefined,
+  departmentId: row.department_id ?? undefined,
+  approverIds: parseJson(row.approver_ids_json, []),
+  approvedBy: row.approved_by ?? undefined,
+  rejectedBy: row.rejected_by ?? undefined,
+  taskDraft: parseJson(row.task_draft_json, undefined),
+  projectDraft: parseJson(row.project_draft_json, undefined),
+  calendarEventDraft: parseJson(row.calendar_event_draft_json, undefined),
+});
+
+const mapNotificationRow = (row) => ({
+  id: row.id,
+  user: row.user_name,
+  actorId: row.actor_id ?? undefined,
+  action: row.action_name,
+  target: row.target_name,
+  time: "Just now",
+  team: row.team ?? undefined,
+  read: Boolean(row.read_state),
+  readAt: row.read_at ?? undefined,
+  kind: row.kind ?? undefined,
+  recipientUserId: row.recipient_user_id ?? undefined,
+  title: row.title ?? undefined,
+  preview: row.preview ?? undefined,
+  link: row.link_url ?? undefined,
+  workspaceLabel: row.workspace_label ?? undefined,
+  entityType: row.entity_type ?? undefined,
+  entityId: row.entity_id ?? undefined,
+  targetType: row.target_type ?? undefined,
+  targetId: row.target_id ?? undefined,
+  parentId: row.parent_id ?? undefined,
+  topic: row.topic ?? undefined,
+  createdAt: row.created_at_iso ?? undefined,
+  updatedAt: row.updated_at_iso ?? undefined,
+});
+
 const upsertUser = async (user) => {
   await query(
     `INSERT INTO users (
@@ -182,6 +233,80 @@ const replaceProjectsSnapshot = async (projects = []) => {
   }
 };
 
+const replaceApprovalsSnapshot = async (approvals = []) => {
+  await query("DELETE FROM approvals");
+  for (const approval of approvals) {
+    await query(
+      `INSERT INTO approvals (
+        id, type, title, requester, requested_by_id, team, status, hidden, task_id, project_id, amount, notes,
+        item_type, item_id, department_id, approver_ids_json, approved_by, rejected_by, submitted_at,
+        task_draft_json, project_draft_json, calendar_event_draft_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        approval.id,
+        approval.type,
+        approval.title,
+        approval.requester,
+        approval.requestedById ?? null,
+        approval.team,
+        approval.status,
+        approval.hidden ?? false,
+        approval.taskId ?? null,
+        approval.projectId ?? null,
+        approval.amount ?? null,
+        approval.notes ?? null,
+        approval.itemType ?? null,
+        approval.itemId ?? approval.taskId ?? approval.projectId ?? null,
+        approval.departmentId ?? approval.team,
+        JSON.stringify(approval.approverIds ?? []),
+        approval.approvedBy ?? null,
+        approval.rejectedBy ?? null,
+        approval.submitted,
+        approval.taskDraft ? JSON.stringify(approval.taskDraft) : null,
+        approval.projectDraft ? JSON.stringify(approval.projectDraft) : null,
+        approval.calendarEventDraft ? JSON.stringify(approval.calendarEventDraft) : null,
+      ]
+    );
+  }
+};
+
+const replaceNotificationsSnapshot = async (notifications = []) => {
+  await query("DELETE FROM notifications");
+  for (const notification of notifications) {
+    await query(
+      `INSERT INTO notifications (
+        id, user_name, actor_id, action_name, target_name, team, read_state, read_at, kind, recipient_user_id,
+        title, preview, link_url, workspace_label, entity_type, entity_id, target_type, target_id, parent_id, topic,
+        created_at_iso, updated_at_iso
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        notification.id,
+        notification.user,
+        notification.actorId ?? null,
+        notification.action,
+        notification.target,
+        notification.team ?? null,
+        notification.read ?? false,
+        notification.readAt ?? null,
+        notification.kind ?? null,
+        notification.recipientUserId ?? null,
+        notification.title ?? null,
+        notification.preview ?? null,
+        notification.link ?? null,
+        notification.workspaceLabel ?? null,
+        notification.entityType ?? null,
+        notification.entityId ?? null,
+        notification.targetType ?? null,
+        notification.targetId ?? null,
+        notification.parentId ?? null,
+        notification.topic ?? null,
+        notification.createdAt ?? null,
+        notification.updatedAt ?? null,
+      ]
+    );
+  }
+};
+
 export const findUserByEmail = async (email) => {
   const rows = await query("SELECT * FROM users WHERE LOWER(email) = LOWER(?) LIMIT 1", [email]);
   return mapUserPreview(rows[0] ?? null);
@@ -282,7 +407,19 @@ export const listProjects = async () => {
 export const getStateSnapshot = async (stateKey) => {
   const rows = await query("SELECT state_json FROM state_snapshots WHERE state_key = ? LIMIT 1", [stateKey]);
   if (!rows[0]?.state_json) return null;
-  return parseJson(rows[0].state_json, null);
+  const snapshot = parseJson(rows[0].state_json, null);
+  if (stateKey !== "app" || !snapshot) return snapshot;
+
+  const [approvals, notifications] = await Promise.all([
+    query("SELECT * FROM approvals ORDER BY created_at DESC"),
+    query("SELECT * FROM notifications ORDER BY created_at DESC"),
+  ]);
+
+  return {
+    ...snapshot,
+    approvals: approvals.map(mapApprovalRow),
+    notifications: notifications.map(mapNotificationRow),
+  };
 };
 
 export const saveStateSnapshot = async (stateKey, payload) => {
@@ -296,6 +433,8 @@ export const saveStateSnapshot = async (stateKey, payload) => {
   if (stateKey === "app") {
     await replaceTasksSnapshot(payload?.tasks ?? []);
     await replaceProjectsSnapshot(payload?.projects ?? []);
+    await replaceApprovalsSnapshot(payload?.approvals ?? []);
+    await replaceNotificationsSnapshot(payload?.notifications ?? []);
   }
 };
 

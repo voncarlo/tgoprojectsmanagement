@@ -55,6 +55,60 @@ CREATE TABLE IF NOT EXISTS projects (
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS approvals (
+  id VARCHAR(64) PRIMARY KEY,
+  type VARCHAR(32) NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  requester VARCHAR(255) NOT NULL,
+  requested_by_id VARCHAR(64) NULL,
+  team VARCHAR(64) NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  hidden BOOLEAN NOT NULL DEFAULT FALSE,
+  task_id VARCHAR(64) NULL,
+  project_id VARCHAR(64) NULL,
+  amount DECIMAL(12, 2) NULL,
+  notes TEXT NULL,
+  item_type VARCHAR(32) NULL,
+  item_id VARCHAR(64) NULL,
+  department_id VARCHAR(64) NULL,
+  approver_ids_json JSON NULL,
+  approved_by VARCHAR(64) NULL,
+  rejected_by VARCHAR(64) NULL,
+  submitted_at VARCHAR(64) NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  task_draft_json JSON NULL,
+  project_draft_json JSON NULL,
+  calendar_event_draft_json JSON NULL
+);
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id VARCHAR(64) PRIMARY KEY,
+  user_name VARCHAR(255) NOT NULL,
+  actor_id VARCHAR(64) NULL,
+  action_name VARCHAR(255) NOT NULL,
+  target_name VARCHAR(255) NOT NULL,
+  team VARCHAR(64) NULL,
+  read_state BOOLEAN NOT NULL DEFAULT FALSE,
+  read_at VARCHAR(64) NULL,
+  kind VARCHAR(32) NULL,
+  recipient_user_id VARCHAR(64) NULL,
+  title VARCHAR(255) NULL,
+  preview TEXT NULL,
+  link_url TEXT NULL,
+  workspace_label VARCHAR(255) NULL,
+  entity_type VARCHAR(32) NULL,
+  entity_id VARCHAR(64) NULL,
+  target_type VARCHAR(32) NULL,
+  target_id VARCHAR(64) NULL,
+  parent_id VARCHAR(64) NULL,
+  topic VARCHAR(32) NULL,
+  created_at_iso VARCHAR(64) NULL,
+  updated_at_iso VARCHAR(64) NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS state_snapshots (
   state_key VARCHAR(64) PRIMARY KEY,
   state_json LONGTEXT NOT NULL,

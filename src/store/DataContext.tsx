@@ -27,10 +27,12 @@ import {
 import { useAuth } from "@/auth/AuthContext";
 import { COMPANY_WORKSPACE_ID } from "@/lib/workspaces";
 import { extractMentionedUsers, toggleReactionEntries, type ReactionEntry } from "@/lib/social";
+import { toast } from "sonner";
 
 interface Notification extends Activity {
   actorId?: string;
   read: boolean;
+  readAt?: string;
   kind?: "activity" | "deadline";
   recipientUserId?: string;
   title?: string;
@@ -43,6 +45,8 @@ interface Notification extends Activity {
   targetId?: string;
   parentId?: string;
   topic?: "task" | "project" | "approval" | "comment" | "mention" | "status" | "calendar" | "deadline" | "chat";
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 type RecycleBinType = "task" | "document" | "project";
@@ -101,7 +105,9 @@ interface ServerStateResponse {
 
 const fetchServerState = async (): Promise<ServerStateResponse> => {
   const response = await fetch("/api/state/app");
-  if (!response.ok) return { data: null, meta: { revision: 0 } };
+  if (!response.ok) {
+    throw new Error(`Unable to load app state (${response.status}).`);
+  }
   const payload = (await response.json()) as { ok: boolean; data?: PersistedDataState | null; meta?: Partial<ServerStateMeta> };
   return {
     data: payload.data ?? null,
@@ -123,7 +129,9 @@ const saveServerState = async (state: PersistedDataState, sourceClientId: string
       },
     }),
   });
-  if (!response.ok) return { revision: 0 };
+  if (!response.ok) {
+    throw new Error(`Unable to save app state (${response.status}).`);
+  }
   const payload = (await response.json()) as { ok: boolean; meta?: Partial<ServerStateMeta> };
   return {
     revision: typeof payload.meta?.revision === "number" ? payload.meta.revision : 0,
@@ -255,6 +263,33 @@ const getRealtimeClientId = () => {
 };
 const nowLabel = () => "Just now";
 const todayIso = () => new Date().toISOString().slice(0, 10);
+const nowIso = () => new Date().toISOString();
+
+const mergeRecordCollections = <T extends { id: string }>(remoteItems: T[] = [], localItems: T[] = []) => {
+  const next = new Map<string, T>();
+  remoteItems.forEach((item) => next.set(item.id, item));
+  localItems.forEach((item) => next.set(item.id, item));
+  return [...next.values()];
+};
+
+const mergePersistedState = (remoteState: PersistedDataState | null, localState: PersistedDataState): PersistedDataState => {
+  if (!remoteState) return localState;
+  return {
+    tasks: mergeRecordCollections(remoteState.tasks, localState.tasks),
+    projects: mergeRecordCollections(remoteState.projects, localState.projects),
+    notifications: mergeRecordCollections(remoteState.notifications, localState.notifications),
+    approvals: mergeRecordCollections(remoteState.approvals, localState.approvals),
+    documents: mergeRecordCollections(remoteState.documents, localState.documents),
+    automations: mergeRecordCollections(remoteState.automations, localState.automations),
+    auditLog: mergeRecordCollections(remoteState.auditLog, localState.auditLog),
+    calendarEvents: mergeRecordCollections(remoteState.calendarEvents, localState.calendarEvents),
+    recycleBin: mergeRecordCollections(remoteState.recycleBin, localState.recycleBin),
+    chats: mergeRecordCollections(remoteState.chats, localState.chats),
+    taskComments: mergeRecordCollections(remoteState.taskComments, localState.taskComments),
+    chatReadAtByUser: { ...(remoteState.chatReadAtByUser ?? {}), ...(localState.chatReadAtByUser ?? {}) },
+    personalNotes: mergeRecordCollections(remoteState.personalNotes, localState.personalNotes),
+  };
+};
 
 const defaultState: PersistedDataState = {
   tasks: seedTasks,
@@ -429,6 +464,12 @@ const buildNotificationLink = (
 };
 const getChatPartnerId = (message: ChatMessage, userId: string) =>
   message.senderId === userId ? message.recipientId : message.recipientId === userId ? message.senderId : null;
+const buildApprovalItemType = (approval: Pick<Approval, "type">): Approval["itemType"] => {
+  if (approval.type === "Task") return "task";
+  if (approval.type === "Project") return "project";
+  if (approval.type === "Leave") return "event";
+  return "approval";
+};
 
 export const DataProvider = ({ children }: { children: ReactNode }) => {
   const auth = useAuth();
@@ -448,6 +489,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const realtimeClientIdRef = useRef(getRealtimeClientId());
   const latestServerRevisionRef = useRef(0);
   const skipNextServerSaveRef = useRef(false);
+  const syncFailureToastShownRef = useRef(false);
 
   const [tasks, setTasks] = useState<Task[]>(initialState.tasks);
   const [projects, setProjects] = useState<Project[]>(initialState.projects);
@@ -512,8 +554,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         const remote = await fetchServerState();
         if (!remote.data || cancelled) return;
         applyRemoteState(remote.data, remote.meta.revision);
-      } catch {
-        // Fallback to local cache when the API is unavailable.
+      } catch (error) {
+        console.error("[state] initial hydration failed", error);
       } finally {
         if (!cancelled) setServerHydrated(true);
       }
@@ -531,9 +573,24 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       skipNextServerSaveRef.current = false;
       return;
     }
-    void saveServerState(persistedState, realtimeClientIdRef.current).then((meta) => {
-      if (meta.revision > 0) latestServerRevisionRef.current = Math.max(latestServerRevisionRef.current, meta.revision);
-    });
+    void (async () => {
+      try {
+        const remote = await fetchServerState();
+        const mergedState = mergePersistedState(remote.data, persistedState);
+        const meta = await saveServerState(mergedState, realtimeClientIdRef.current);
+        latestServerRevisionRef.current = Math.max(latestServerRevisionRef.current, meta.revision);
+        if (JSON.stringify(mergedState) !== JSON.stringify(persistedState)) {
+          applyRemoteState(mergedState, meta.revision);
+        }
+        syncFailureToastShownRef.current = false;
+      } catch (error) {
+        console.error("[state] save failed", error);
+        if (!syncFailureToastShownRef.current) {
+          toast.error("We couldn't save the latest update. Retrying in the background.");
+          syncFailureToastShownRef.current = true;
+        }
+      }
+    })();
   }, [persistedState, serverHydrated]);
 
   useEffect(() => {
@@ -550,8 +607,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         if (expectedRevision && remoteRevision < expectedRevision) return;
         if (remoteRevision <= latestServerRevisionRef.current) return;
         applyRemoteState(remote.data, remoteRevision);
-      } catch {
-        // Polling fallback will try again on the next interval.
+        syncFailureToastShownRef.current = false;
+      } catch (error) {
+        console.error("[state] realtime reconciliation failed", error);
       }
     };
 
@@ -583,9 +641,18 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       void syncIfNewer();
     }, 5000);
 
+    const onReconnect = () => {
+      void syncIfNewer();
+    };
+
+    window.addEventListener("online", onReconnect);
+    document.addEventListener("visibilitychange", onReconnect);
+
     return () => {
       closed = true;
       window.clearInterval(poller);
+       window.removeEventListener("online", onReconnect);
+       document.removeEventListener("visibilitychange", onReconnect);
       eventSource?.close();
     };
   }, [applyRemoteState, serverHydrated]);
@@ -603,58 +670,77 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         ...tasks
           .filter((task) => task.status !== "Completed" && task.status !== "Cancelled" && isUpcoming(task.due))
           .map((task) => ({
-            id: `deadline-task-${task.id}`,
+            id: `deadline-task-${task.id}-${currentUser.id}`,
             user: "System",
             action: "deadline reminder",
             target: `${task.title} is due ${deadlineLabel(task.due)}`,
             time: "Deadline reminder",
             team: task.team,
-            read: existing.get(`deadline-task-${task.id}`)?.read ?? false,
+            read: existing.get(`deadline-task-${task.id}-${currentUser.id}`)?.read ?? false,
+            readAt: existing.get(`deadline-task-${task.id}-${currentUser.id}`)?.readAt,
             kind: "deadline" as const,
+            topic: "deadline" as const,
+            recipientUserId: currentUser.id,
+            title: "Task deadline",
+            preview: `${task.title} is due ${deadlineLabel(task.due)}.`,
+            link: "/tasks",
+            workspaceLabel: departmentLabel(task.team),
+            entityType: "task" as const,
+            entityId: task.id,
+            createdAt: existing.get(`deadline-task-${task.id}-${currentUser.id}`)?.createdAt ?? nowIso(),
+            updatedAt: nowIso(),
           })),
         ...projects
           .filter((project) => project.status !== "Completed" && project.status !== "Cancelled" && isUpcoming(project.end, 5))
           .map((project) => ({
-            id: `deadline-project-${project.id}`,
+            id: `deadline-project-${project.id}-${currentUser.id}`,
             user: "System",
             action: "project reminder",
             target: `${project.name} ends ${deadlineLabel(project.end)}`,
             time: "Deadline reminder",
             team: project.team,
-            read: existing.get(`deadline-project-${project.id}`)?.read ?? false,
+            read: existing.get(`deadline-project-${project.id}-${currentUser.id}`)?.read ?? false,
+            readAt: existing.get(`deadline-project-${project.id}-${currentUser.id}`)?.readAt,
             kind: "deadline" as const,
             topic: "deadline" as const,
+            recipientUserId: currentUser.id,
             title: "Project deadline",
             preview: `${project.name} ends ${deadlineLabel(project.end)}.`,
             link: "/projects",
             workspaceLabel: departmentLabel(project.team),
             entityType: "project" as const,
             entityId: project.id,
+            createdAt: existing.get(`deadline-project-${project.id}-${currentUser.id}`)?.createdAt ?? nowIso(),
+            updatedAt: nowIso(),
           })),
         ...calendarEvents
           .filter((event) => isUpcoming(event.date, 3))
           .map((event) => ({
-            id: `deadline-event-${event.id}`,
+            id: `deadline-event-${event.id}-${currentUser.id}`,
             user: "System",
             action: "event reminder",
             target: `${event.title} is scheduled ${deadlineLabel(event.date)}`,
             time: "Event reminder",
             team: event.team,
-            read: existing.get(`deadline-event-${event.id}`)?.read ?? false,
+            read: existing.get(`deadline-event-${event.id}-${currentUser.id}`)?.read ?? false,
+            readAt: existing.get(`deadline-event-${event.id}-${currentUser.id}`)?.readAt,
             kind: "deadline" as const,
             topic: "deadline" as const,
+            recipientUserId: currentUser.id,
             title: "Event reminder",
             preview: `${event.title} is scheduled ${deadlineLabel(event.date)}.`,
             link: "/calendar",
             workspaceLabel: departmentLabel(event.team),
             entityType: "event" as const,
             entityId: event.id,
+            createdAt: existing.get(`deadline-event-${event.id}-${currentUser.id}`)?.createdAt ?? nowIso(),
+            updatedAt: nowIso(),
           })),
       ];
 
       return [...deadlineItems, ...nonDeadline].slice(0, 60);
     });
-  }, [calendarEvents, currentUser.notificationSettings?.deadlines, currentUser.notificationSettings?.enabled, projects, tasks]);
+  }, [calendarEvents, currentUser.id, currentUser.notificationSettings?.deadlines, currentUser.notificationSettings?.enabled, projects, tasks]);
 
   const userHasTeamAccess = useCallback(
     (userId: string, team?: TeamId) => {
@@ -693,6 +779,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       const topic = activity.topic ?? inferNotificationTopic(activity.action, activity.kind);
       if (!shouldCreateNotification(topic, activity.kind)) return;
       if (activity.kind !== "deadline" && !activity.recipientUserId) return;
+      const createdAt = activity.createdAt ?? nowIso();
       setNotifications((items) => [
         {
           ...activity,
@@ -701,12 +788,15 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           actorId: activity.actorId,
           time: nowLabel(),
           read: false,
+          readAt: undefined,
           kind: activity.kind ?? "activity",
           topic,
           title: activity.title ?? notificationTitle(topic),
           preview: activity.preview ?? `${activity.user} ${activity.action} ${activity.target}`.trim(),
           link: buildNotificationLink({ ...activity, topic }),
           workspaceLabel: activity.workspaceLabel ?? departmentLabel(team),
+          createdAt,
+          updatedAt: activity.updatedAt ?? createdAt,
         },
         ...items,
       ].slice(0, 60));
@@ -719,6 +809,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       const team = activity.team ?? (activeWorkspace?.isCompanyWide ? undefined : visibleTeams[0]);
       const topic = activity.topic ?? inferNotificationTopic(activity.action, activity.kind);
       if (!shouldCreateNotification(topic, activity.kind)) return;
+      const createdAt = activity.createdAt ?? nowIso();
       setNotifications((items) => [
         {
           ...activity,
@@ -727,12 +818,15 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           actorId: activity.actorId ?? currentUser.id,
           time: nowLabel(),
           read: false,
+          readAt: undefined,
           kind: activity.kind ?? "activity",
           topic,
           title: activity.title ?? notificationTitle(topic),
           preview: activity.preview ?? `${activity.user} ${activity.action} ${activity.target}`.trim(),
           link: buildNotificationLink({ ...activity, topic }),
           workspaceLabel: activity.workspaceLabel ?? departmentLabel(team),
+          createdAt,
+          updatedAt: activity.updatedAt ?? createdAt,
         },
         ...items,
       ].slice(0, 60));
@@ -749,6 +843,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const getApprovalRecipientsForTeam = useCallback(
     (team: TeamId) => auth.getTeamApprovalRecipients(team),
     [auth]
+  );
+  const getApprovalRecipientIdsForTeam = useCallback(
+    (team: TeamId) => uniqueUserIds(getApprovalRecipientsForTeam(team).map((user) => user.id)),
+    [getApprovalRecipientsForTeam]
   );
   const getApprovalSummaryForTeam = useCallback(
     (team: TeamId) => {
@@ -902,6 +1000,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       };
 
       if (!canDirectTaskCreate) {
+        const approverIds = getApprovalRecipientIdsForTeam(normalizedTask.team);
         const approval: Approval = {
           id: id("ap"),
           type: "Task",
@@ -912,6 +1011,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           status: "Pending",
           submitted: todayIso(),
           notes: normalizedTask.notes,
+          itemType: "task",
+          itemId: normalizedTask.title,
+          departmentId: normalizedTask.team,
+          approverIds,
           taskDraft: {
             ...normalizedTask,
             status: normalizedTask.status === "Completed" ? "Not Started" : normalizedTask.status,
@@ -921,6 +1024,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           },
         };
         setApprovals((items) => [approval, ...items]);
+        console.debug("[approvals] created task approval request", {
+          approvalId: approval.id,
+          requestedBy: currentUser.id,
+          approverIds,
+          team: normalizedTask.team,
+        });
         pushActivity({ user: currentUser.name, action: "requested task", target: normalizedTask.title });
         appendAudit({
           user: currentUser.name,
@@ -961,7 +1070,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       });
       return next;
     },
-    [appendAudit, auth.userList, buildTaskRecord, canDirectTaskCreate, currentUser.id, currentUser.name, notifyApprovalRecipients, notifyUsers, pushActivity]
+    [appendAudit, auth.userList, buildTaskRecord, canDirectTaskCreate, currentUser.id, currentUser.name, getApprovalRecipientIdsForTeam, notifyApprovalRecipients, notifyUsers, pushActivity]
   );
 
   const updateTask: DataCtx["updateTask"] = useCallback(
@@ -1036,7 +1145,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             status: "Pending",
             submitted: todayIso(),
             notes: updatedTask.notes,
+            requestedById: auth.userList.find((user) => user.name === updatedTask?.assignee)?.id,
             taskId: updatedTask.id,
+            itemType: "task",
+            itemId: updatedTask.id,
+            departmentId: updatedTask.team,
+            approverIds: getApprovalRecipientIdsForTeam(updatedTask.team),
           };
           return existing
             ? items.map((item) => (item.id === existing.id ? nextApproval : item))
@@ -1082,7 +1196,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         });
       }
     },
-    [appendAudit, auth.userList, currentUser.name, pushActivity, notifyUsers]
+    [appendAudit, auth.userList, currentUser.name, getApprovalRecipientIdsForTeam, pushActivity, notifyUsers]
   );
 
   const removeTask: DataCtx["removeTask"] = useCallback(
@@ -1124,6 +1238,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       } as Project);
 
       if (!canDirectProjectCreate) {
+        const approverIds = getApprovalRecipientIdsForTeam(normalizedProject.team);
         const approval: Approval = {
           id: id("ap"),
           type: "Project",
@@ -1134,6 +1249,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           status: "Pending",
           submitted: todayIso(),
           notes: normalizedProject.description,
+          itemType: "project",
+          itemId: normalizedProject.name,
+          departmentId: normalizedProject.team,
+          approverIds,
           projectDraft: {
             ...normalizedProject,
             requiresApproval: false,
@@ -1142,6 +1261,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           },
         };
         setApprovals((items) => [approval, ...items]);
+        console.debug("[approvals] created project approval request", {
+          approvalId: approval.id,
+          requestedBy: currentUser.id,
+          approverIds,
+          team: normalizedProject.team,
+        });
         pushActivity({ user: currentUser.name, action: "requested project", target: normalizedProject.name });
         appendAudit({
           user: currentUser.name,
@@ -1195,7 +1320,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       });
       return next;
     },
-    [appendAudit, auth.userList, canDirectProjectCreate, currentUser.id, currentUser.name, currentUser.role, getApprovalSummaryForTeam, notifyApprovalRecipients, notifyUsers, pushActivity]
+    [appendAudit, auth.userList, canDirectProjectCreate, currentUser.id, currentUser.name, currentUser.role, getApprovalRecipientIdsForTeam, getApprovalSummaryForTeam, notifyApprovalRecipients, notifyUsers, pushActivity]
   );
 
   const updateProject: DataCtx["updateProject"] = useCallback(
@@ -1266,6 +1391,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             submitted: todayIso(),
             notes: updatedProject.description,
             projectId: updatedProject.id,
+            requestedById: auth.userList.find((user) => user.name === updatedProject?.owner)?.id,
+            itemType: "project",
+            itemId: updatedProject.id,
+            departmentId: updatedProject.team,
+            approverIds: getApprovalRecipientIdsForTeam(updatedProject.team),
           };
           return existing
             ? items.map((item) => (item.id === existing.id ? nextApproval : item))
@@ -1316,7 +1446,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         });
       }
     },
-    [appendAudit, auth.userList, currentUser.name, notifyUsers, pushActivity]
+    [appendAudit, auth.userList, currentUser.name, getApprovalRecipientIdsForTeam, notifyUsers, pushActivity]
   );
 
   const removeProject: DataCtx["removeProject"] = useCallback(
@@ -1380,19 +1510,21 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   );
 
   const markAllRead = useCallback(() => {
+    const readAt = nowIso();
     setNotifications((items) =>
       items.map((item) =>
-        !item.recipientUserId || item.recipientUserId === currentUser.id ? { ...item, read: true } : item
+        !item.recipientUserId || item.recipientUserId === currentUser.id ? { ...item, read: true, readAt, updatedAt: readAt } : item
       )
     );
   }, [currentUser.id]);
 
   const markNotificationRead = useCallback(
     (notificationId: string) => {
+      const readAt = nowIso();
       setNotifications((items) =>
         items.map((item) =>
           item.id === notificationId && (!item.recipientUserId || item.recipientUserId === currentUser.id)
-            ? { ...item, read: true }
+            ? { ...item, read: true, readAt, updatedAt: readAt }
             : item
         )
       );
@@ -1768,6 +1900,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
   const requestCalendarPto: DataCtx["requestCalendarPto"] = useCallback(
     (event) => {
+      const approverIds = getApprovalRecipientIdsForTeam(event.team ?? visibleTeams[0] ?? "projects");
       const approval: Approval = {
         id: id("ap"),
         type: "Leave",
@@ -1778,9 +1911,19 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         status: "Pending",
         submitted: todayIso(),
         notes: event.title,
+        itemType: "event",
+        itemId: event.title,
+        departmentId: event.team ?? visibleTeams[0] ?? "projects",
+        approverIds,
         calendarEventDraft: event,
       };
       setApprovals((items) => [approval, ...items]);
+      console.debug("[approvals] created leave approval request", {
+        approvalId: approval.id,
+        requestedBy: approval.requestedById,
+        approverIds,
+        team: approval.team,
+      });
       appendAudit({
         user: currentUser.name,
         action: "Submitted PTO request",
@@ -1804,7 +1947,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         link: "/approvals",
       });
     },
-    [appendAudit, currentUser.name, notifyApprovalRecipients, pushActivity, visibleTeams]
+    [appendAudit, currentUser.name, getApprovalRecipientIdsForTeam, notifyApprovalRecipients, pushActivity, visibleTeams]
   );
 
   const decideApproval: DataCtx["decideApproval"] = useCallback(
@@ -1815,11 +1958,24 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       setApprovals((items) =>
         items.map((approval) => {
           if (approval.id !== approvalId) return approval;
-          updatedApproval = { ...approval, status, notes: comment || approval.notes };
+          updatedApproval = {
+            ...approval,
+            status,
+            notes: comment || approval.notes,
+            approvedBy: status === "Approved" ? currentUser.id : approval.approvedBy,
+            rejectedBy: status === "Rejected" || status === "Returned" ? currentUser.id : approval.rejectedBy,
+          };
           return updatedApproval;
         })
       );
       if (!updatedApproval) return;
+      console.debug("[approvals] decision recorded", {
+        approvalId,
+        status,
+        actorId: currentUser.id,
+        itemType: updatedApproval.itemType ?? buildApprovalItemType(updatedApproval),
+        itemId: updatedApproval.itemId ?? updatedApproval.taskId ?? updatedApproval.projectId ?? updatedApproval.id,
+      });
       if (updatedApproval.taskId) {
         const taskDecision =
           status === "Approved"
@@ -1854,6 +2010,17 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           category: "Approval",
           team: createdTask.team,
         });
+        notifyUsers(uniqueUserIds([auth.userList.find((user) => user.name === createdTask.assignee)?.id]), {
+          action: "approved and published a task for you",
+          target: createdTask.title,
+          preview: `${createdTask.title} is now live in your task list.`,
+          team: createdTask.team,
+          topic: "task",
+          entityType: "task",
+          entityId: createdTask.id,
+          targetType: "task",
+          targetId: createdTask.id,
+        });
       }
       if (updatedApproval.projectDraft && status === "Approved") {
         const createdProject: Project = recomputeProgress({
@@ -1880,6 +2047,23 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           category: "Approval",
           team: createdProject.team,
         });
+        notifyUsers(
+          uniqueUserIds([
+            auth.userList.find((user) => user.name === createdProject.owner)?.id,
+            ...(createdProject.coOwners ?? []).map((name) => auth.userList.find((user) => user.name === name)?.id),
+          ]),
+          {
+            action: "approved and published a project for you",
+            target: createdProject.name,
+            preview: `${createdProject.name} is now live in your workspace.`,
+            team: createdProject.team,
+            topic: "project",
+            entityType: "project",
+            entityId: createdProject.id,
+            targetType: "project",
+            targetId: createdProject.id,
+          }
+        );
       }
       if (updatedApproval.projectId) {
         const projectDecision =
@@ -1930,7 +2114,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         entityId: updatedApproval.id,
       });
     },
-    [addCalendarEvent, approvals, appendAudit, auth, buildTaskRecord, currentUser.name, decideProjectApproval, decideTaskApproval, notifyApprovalRequester, pushActivity]
+    [addCalendarEvent, approvals, appendAudit, auth, buildTaskRecord, currentUser.id, currentUser.name, decideProjectApproval, decideTaskApproval, notifyApprovalRequester, notifyUsers, pushActivity]
   );
 
   const hideApproval: DataCtx["hideApproval"] = useCallback(
@@ -2332,19 +2516,28 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const notificationsForUser =
     currentUser.notificationSettings?.enabled === false
       ? []
-      : displayNotifications.filter(
-          (notification) => {
+      : [...displayNotifications]
+          .filter((notification) => {
             if (notification.recipientUserId) return notification.recipientUserId === currentUser.id;
             if (notification.kind !== "deadline") return false;
             if (isCompanyLevelUser) return true;
             if (!notification.team) return (currentUser.workspaceIds ?? []).includes(COMPANY_WORKSPACE_ID);
             return (currentUser.teams ?? [currentUser.team]).includes(notification.team);
-          }
-        );
+          })
+          .sort((left, right) => new Date(right.createdAt ?? 0).getTime() - new Date(left.createdAt ?? 0).getTime());
 
   const filteredTasks = useMemo(() => displayTasks.filter((task) => isTeamVisible(task.team)), [displayTasks, visibleTeams, activeWorkspace?.isCompanyWide]);
   const filteredProjects = useMemo(() => displayProjects.filter((project) => isTeamVisible(project.team)), [displayProjects, visibleTeams, activeWorkspace?.isCompanyWide]);
-  const filteredApprovals = useMemo(() => displayApprovals.filter((approval) => isTeamVisible(approval.team)), [displayApprovals, visibleTeams, activeWorkspace?.isCompanyWide]);
+  const filteredApprovals = useMemo(
+    () =>
+      displayApprovals.filter((approval) => {
+        if (approval.requestedById === currentUser.id) return true;
+        if (isCompanyLevelUser) return true;
+        if (approval.approverIds?.includes(currentUser.id)) return true;
+        return isTeamVisible(approval.team);
+      }),
+    [currentUser.id, displayApprovals, isCompanyLevelUser, visibleTeams, activeWorkspace?.isCompanyWide]
+  );
   const filteredDocuments = useMemo(() => displayDocuments.filter((document) => isTeamVisible(document.team)), [displayDocuments, visibleTeams, activeWorkspace?.isCompanyWide]);
   const filteredAuditLog = useMemo(() => displayAuditLog.filter((entry) => isTeamVisible(entry.team)), [displayAuditLog, visibleTeams, activeWorkspace?.isCompanyWide]);
   const filteredCalendarEvents = useMemo(() => displayCalendarEvents.filter((event) => isTeamVisible(event.team)), [displayCalendarEvents, visibleTeams, activeWorkspace?.isCompanyWide]);

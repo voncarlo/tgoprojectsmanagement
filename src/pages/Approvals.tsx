@@ -36,15 +36,15 @@ const TYPE_TONE = {
 const FILTERS = ["All", "Pending", "Under Review", "Approved", "Rejected", "Returned"] as const;
 
 const Approvals = () => {
-  const { visibleTeams, canDecideTeamApprovals, hasAssignedTeamLead, isAdmin } = useAuth();
+  const { canDecideTeamApprovals, hasAssignedTeamLead, isAdmin } = useAuth();
   const { approvals, decideApproval, hideApproval, removeApproval, clearApprovals } = useData();
   const [filter, setFilter] = useState<ApprovalStatus | "All">("All");
   const [open, setOpen] = useState<Approval | null>(null);
   const [comment, setComment] = useState("");
 
   const scopedApprovals = useMemo(
-    () => approvals.filter((approval) => !approval.hidden && visibleTeams.includes(approval.team)),
-    [approvals, visibleTeams]
+    () => approvals.filter((approval) => !approval.hidden),
+    [approvals]
   );
 
   const visible = useMemo(
@@ -96,7 +96,7 @@ const Approvals = () => {
     <div className="space-y-6">
       <PageHeader
         title="Approvals"
-        description="Multi-step approvals across tasks, leave, budgets, changes and reports."
+        description="Pending approvals stay visible here for assigned Managers or Team Leads, plus Admins and Super Admins, with live status updates for requesters."
         actions={
           <Can
             cap="approval.decide"
@@ -178,6 +178,12 @@ const Approvals = () => {
                     </div>
                   </div>
                 )}
+                {open.approverIds?.length ? (
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium mb-1">Assigned approvers</p>
+                    <p className="text-sm text-muted-foreground">{open.approverIds.length} approver{open.approverIds.length === 1 ? "" : "s"} assigned</p>
+                  </div>
+                ) : null}
                 {open.projectDraft && (
                   <div className="space-y-3 rounded-lg border border-border/60 bg-muted/20 p-3">
                     <div className="grid grid-cols-2 gap-3">

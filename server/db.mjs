@@ -82,6 +82,21 @@ export const ensureSchema = async () => {
   await ensureTableColumn("projects", "approval_status", "VARCHAR(64) NULL");
   await ensureTableColumn("projects", "approval_history_json", "JSON NULL");
   await ensureTableColumn("projects", "subtasks_json", "JSON NULL");
+  await ensureTableColumn("approvals", "requested_by_id", "VARCHAR(64) NULL");
+  await ensureTableColumn("approvals", "item_type", "VARCHAR(32) NULL");
+  await ensureTableColumn("approvals", "item_id", "VARCHAR(64) NULL");
+  await ensureTableColumn("approvals", "department_id", "VARCHAR(64) NULL");
+  await ensureTableColumn("approvals", "approver_ids_json", "JSON NULL");
+  await ensureTableColumn("approvals", "approved_by", "VARCHAR(64) NULL");
+  await ensureTableColumn("approvals", "rejected_by", "VARCHAR(64) NULL");
+  await ensureTableColumn("approvals", "submitted_at", "VARCHAR(64) NOT NULL DEFAULT ''");
+  await ensureTableColumn("approvals", "task_draft_json", "JSON NULL");
+  await ensureTableColumn("approvals", "project_draft_json", "JSON NULL");
+  await ensureTableColumn("approvals", "calendar_event_draft_json", "JSON NULL");
+  await ensureTableColumn("notifications", "actor_id", "VARCHAR(64) NULL");
+  await ensureTableColumn("notifications", "read_at", "VARCHAR(64) NULL");
+  await ensureTableColumn("notifications", "created_at_iso", "VARCHAR(64) NULL");
+  await ensureTableColumn("notifications", "updated_at_iso", "VARCHAR(64) NULL");
 };
 
 export const query = async (sql, params = []) => {

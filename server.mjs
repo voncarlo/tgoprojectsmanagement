@@ -54,8 +54,15 @@ const broadcastAppStateUpdate = (payload) => {
     try {
       sendSseEvent(client, "app-state-updated", message);
     } catch {
+      console.error("[realtime] failed to deliver app-state update");
       sseClients.delete(client);
     }
+  });
+
+  console.debug("[realtime] app-state updated", {
+    revision: message.revision,
+    sourceClientId: message.sourceClientId ?? null,
+    clients: sseClients.size,
   });
 
   return message;
@@ -193,6 +200,7 @@ const handleApiRequest = async (req, res, pathname) => {
         : undefined;
     await saveStateSnapshot("app", nextState);
     const event = broadcastAppStateUpdate({ sourceClientId });
+    console.debug("[state] saved app snapshot", { revision: event.revision, sourceClientId: sourceClientId ?? null });
     sendJson(res, 200, { ok: true, meta: { revision: event.revision, sourceClientId: event.sourceClientId } });
     return true;
   }
