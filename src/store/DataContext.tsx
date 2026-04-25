@@ -29,6 +29,7 @@ import { COMPANY_WORKSPACE_ID } from "@/lib/workspaces";
 import { extractMentionedUsers, toggleReactionEntries, type ReactionEntry } from "@/lib/social";
 
 interface Notification extends Activity {
+  actorId?: string;
   read: boolean;
   kind?: "activity" | "deadline";
   recipientUserId?: string;
@@ -395,6 +396,7 @@ const notificationTitle = (topic?: Notification["topic"]) => {
       return "Notification";
   }
 };
+const uniqueUserIds = (userIds: Array<string | undefined>) => [...new Set(userIds.filter((value): value is string => Boolean(value)))];
 const shouldCreateNotification = (topic?: Notification["topic"], kind?: Notification["kind"]) =>
   kind === "deadline" || ["task", "project", "approval", "comment", "mention", "status", "calendar", "chat"].includes(topic ?? "");
 const buildQueryString = (entries: Array<[string, string | undefined]>) => {
@@ -672,16 +674,31 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     ].slice(0, 100));
   }, []);
 
+  const logNotificationDispatch = useCallback(
+    (payload: { actorId?: string; recipientIds: string[]; type?: Notification["topic"]; targetId?: string; target: string }) => {
+      console.debug("[notifications]", {
+        actorId: payload.actorId ?? null,
+        recipientIds: payload.recipientIds,
+        notificationType: payload.type ?? null,
+        targetId: payload.targetId ?? null,
+        target: payload.target,
+      });
+    },
+    []
+  );
+
   const pushActivity: DataCtx["pushActivity"] = useCallback(
     (activity) => {
       const team = activity.team ?? (activeWorkspace?.isCompanyWide ? undefined : visibleTeams[0]);
       const topic = activity.topic ?? inferNotificationTopic(activity.action, activity.kind);
       if (!shouldCreateNotification(topic, activity.kind)) return;
+      if (activity.kind !== "deadline" && !activity.recipientUserId) return;
       setNotifications((items) => [
         {
           ...activity,
           team,
           id: id("a"),
+          actorId: activity.actorId,
           time: nowLabel(),
           read: false,
           kind: activity.kind ?? "activity",
@@ -707,6 +724,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           ...activity,
           team,
           id: id("a"),
+          actorId: activity.actorId ?? currentUser.id,
           time: nowLabel(),
           read: false,
           kind: activity.kind ?? "activity",
@@ -718,8 +736,15 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         },
         ...items,
       ].slice(0, 60));
+      logNotificationDispatch({
+        actorId: activity.actorId ?? currentUser.id,
+        recipientIds: uniqueUserIds([activity.recipientUserId]),
+        type: topic,
+        targetId: activity.targetId ?? activity.entityId,
+        target: activity.target,
+      });
     },
-    [activeWorkspace?.isCompanyWide, visibleTeams]
+    [activeWorkspace?.isCompanyWide, currentUser.id, logNotificationDispatch, visibleTeams]
   );
   const getApprovalRecipientsForTeam = useCallback(
     (team: TeamId) => auth.getTeamApprovalRecipients(team),
@@ -791,6 +816,48 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         entityType: payload.entityType,
         entityId: payload.entityId,
       });
+    },
+    [currentUser.id, currentUser.name, pushNotification]
+  );
+  const notifyUsers = useCallback(
+    (
+      recipientIds: string[],
+      payload: {
+        action: string;
+        target: string;
+        preview: string;
+        team?: TeamId;
+        topic?: Notification["topic"];
+        title?: string;
+        workspaceLabel?: string;
+        entityType?: Notification["entityType"];
+        entityId?: string;
+        targetType?: Notification["targetType"];
+        targetId?: string;
+        parentId?: string;
+      }
+    ) => {
+      uniqueUserIds(recipientIds)
+        .filter((recipientId) => recipientId !== currentUser.id)
+        .forEach((recipientId) => {
+          pushNotification({
+            actorId: currentUser.id,
+            user: currentUser.name,
+            action: payload.action,
+            target: payload.target,
+            preview: payload.preview,
+            recipientUserId: recipientId,
+            team: payload.team,
+            topic: payload.topic,
+            title: payload.title,
+            workspaceLabel: payload.workspaceLabel,
+            entityType: payload.entityType,
+            entityId: payload.entityId,
+            targetType: payload.targetType,
+            targetId: payload.targetId,
+            parentId: payload.parentId,
+          });
+        });
     },
     [currentUser.id, currentUser.name, pushNotification]
   );
@@ -874,6 +941,17 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       const next = buildTaskRecord(normalizedTask);
       setTasks((items) => [next, ...items]);
       pushActivity({ user: currentUser.name, action: "created task", target: next.title, targetType: "task", targetId: next.id });
+      notifyUsers(uniqueUserIds([auth.userList.find((user) => user.name === next.assignee)?.id]), {
+        action: "assigned you a task",
+        target: next.title,
+        preview: `${next.title} was assigned to you.`,
+        team: next.team,
+        topic: "task",
+        entityType: "task",
+        entityId: next.id,
+        targetType: "task",
+        targetId: next.id,
+      });
       appendAudit({
         user: currentUser.name,
         action: "Created task",
@@ -883,7 +961,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       });
       return next;
     },
-    [appendAudit, buildTaskRecord, canDirectTaskCreate, currentUser.id, currentUser.name, notifyApprovalRecipients, pushActivity]
+    [appendAudit, auth.userList, buildTaskRecord, canDirectTaskCreate, currentUser.id, currentUser.name, notifyApprovalRecipients, notifyUsers, pushActivity]
   );
 
   const updateTask: DataCtx["updateTask"] = useCallback(
@@ -977,6 +1055,17 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       }
 
         if (patch.status) {
+          notifyUsers(uniqueUserIds([auth.userList.find((user) => user.name === updatedTask.assignee)?.id]), {
+            action: patch.status === "Completed" ? "completed a task assigned to you" : "updated a task assigned to you",
+            target: updatedTask.title,
+            preview: `${updatedTask.title} is now ${patch.status}.`,
+            team: updatedTask.team,
+            topic: "status",
+            entityType: "task",
+            entityId: updatedTask.id,
+            targetType: "task",
+            targetId: updatedTask.id,
+          });
           pushActivity({
             user: currentUser.name,
             action: patch.status === "Completed" ? "completed task" : `moved to ${patch.status}`,
@@ -993,7 +1082,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         });
       }
     },
-    [appendAudit, currentUser.name, pushActivity]
+    [appendAudit, auth.userList, currentUser.name, pushActivity, notifyUsers]
   );
 
   const removeTask: DataCtx["removeTask"] = useCallback(
@@ -1080,6 +1169,23 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       };
       setProjects((items) => [next, ...items]);
       pushActivity({ user: currentUser.name, action: "created project", target: next.name, targetType: "project", targetId: next.id });
+      notifyUsers(
+        uniqueUserIds([
+          auth.userList.find((user) => user.name === next.owner)?.id,
+          ...(next.coOwners ?? []).map((name) => auth.userList.find((user) => user.name === name)?.id),
+        ]),
+        {
+          action: "added you to a project",
+          target: next.name,
+          preview: `${next.name} is now available in your workspace.`,
+          team: next.team,
+          topic: "project",
+          entityType: "project",
+          entityId: next.id,
+          targetType: "project",
+          targetId: next.id,
+        }
+      );
       appendAudit({
         user: currentUser.name,
         action: "Created project",
@@ -1089,7 +1195,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       });
       return next;
     },
-    [appendAudit, canDirectProjectCreate, currentUser.id, currentUser.name, currentUser.role, getApprovalSummaryForTeam, notifyApprovalRecipients, pushActivity]
+    [appendAudit, auth.userList, canDirectProjectCreate, currentUser.id, currentUser.name, currentUser.role, getApprovalSummaryForTeam, notifyApprovalRecipients, notifyUsers, pushActivity]
   );
 
   const updateProject: DataCtx["updateProject"] = useCallback(
@@ -1184,6 +1290,23 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         team: updatedProject.team,
       });
       if (patch.status) {
+        notifyUsers(
+          uniqueUserIds([
+            auth.userList.find((user) => user.name === updatedProject.owner)?.id,
+            ...(updatedProject.coOwners ?? []).map((name) => auth.userList.find((user) => user.name === name)?.id),
+          ]),
+          {
+            action: "updated a project you follow",
+            target: updatedProject.name,
+            preview: `${updatedProject.name} is now ${patch.status}.`,
+            team: updatedProject.team,
+            topic: "status",
+            entityType: "project",
+            entityId: updatedProject.id,
+            targetType: "project",
+            targetId: updatedProject.id,
+          }
+        );
         pushActivity({
           user: currentUser.name,
           action: patch.status === "Completed" ? "completed project" : `updated project to ${patch.status}`,
@@ -1193,7 +1316,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         });
       }
     },
-    [appendAudit, currentUser.name, pushActivity]
+    [appendAudit, auth.userList, currentUser.name, notifyUsers, pushActivity]
   );
 
   const removeProject: DataCtx["removeProject"] = useCallback(
@@ -1925,40 +2048,35 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         reactions: [],
       };
       setChats((items) => [...items, message]);
-      pushNotification({
-        user: currentUser.name,
+      notifyUsers([recipient.id], {
         action: "sent you a message",
         target: recipient.name,
-        recipientUserId: recipient.id,
+        preview: text || attachment?.name || "Attachment",
         topic: "chat",
         targetType: "chat",
         targetId: message.id,
         parentId: currentUser.id,
         entityType: "chat",
         entityId: message.id,
-        preview: text || attachment?.name || "Attachment",
         workspaceLabel: "Direct message",
       });
-      mentionedUsers
-        .filter((user) => user.id !== recipient.id)
-        .forEach((user) => {
-          pushNotification({
-            user: currentUser.name,
-            action: "mentioned you in chat",
-            target: recipient.name,
-            recipientUserId: user.id,
-            topic: "mention",
-            targetType: "chat",
-            targetId: message.id,
-            parentId: currentUser.id,
-            entityType: "chat",
-            entityId: message.id,
-            preview: text || attachment?.name || "Attachment",
-            workspaceLabel: "Direct message",
-          });
-        });
+      notifyUsers(
+        mentionedUsers.filter((user) => user.id !== recipient.id).map((user) => user.id),
+        {
+          action: "mentioned you in chat",
+          target: recipient.name,
+          preview: text || attachment?.name || "Attachment",
+          topic: "mention",
+          targetType: "chat",
+          targetId: message.id,
+          parentId: currentUser.id,
+          entityType: "chat",
+          entityId: message.id,
+          workspaceLabel: "Direct message",
+        }
+      );
     },
-    [auth.userList, currentUser.id, currentUser.name, pushNotification]
+    [auth.userList, currentUser.id, currentUser.name, notifyUsers]
   );
 
   const updateChatMessage: DataCtx["updateChatMessage"] = useCallback(
@@ -2004,37 +2122,26 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         reactions: [],
       };
       setTaskComments((items) => [nextComment, ...items]);
-      pushActivity({
-        user: currentUser.name,
-        action: "commented on",
-        target: task.title,
-        team: task.team,
-        targetType: "comment",
-        targetId: nextComment.id,
-        parentId: task.id,
-        topic: "comment",
-        entityType: "comment",
-        entityId: nextComment.id,
-        preview: text,
-      });
-      mentionedUsers.forEach((user) => {
-        pushNotification({
-          user: currentUser.name,
-          action: "mentioned you in a comment on",
+      notifyUsers(
+        uniqueUserIds([
+          auth.userList.find((user) => user.name === task.assignee)?.id,
+          ...mentionedUsers.map((user) => user.id),
+        ]),
+        {
+          action: mentionedUsers.length > 0 ? "mentioned you in a comment on" : "commented on",
           target: task.title,
+          preview: text,
           team: task.team,
-          recipientUserId: user.id,
           targetType: "comment",
           targetId: nextComment.id,
           parentId: task.id,
-          topic: "mention",
+          topic: mentionedUsers.length > 0 ? "mention" : "comment",
           entityType: "comment",
           entityId: nextComment.id,
-          preview: text,
-        });
-      });
+        }
+      );
     },
-    [auth.userList, currentUser.id, currentUser.name, pushActivity, pushNotification, tasks, userHasTeamAccess]
+    [auth.userList, currentUser.id, currentUser.name, notifyUsers, tasks, userHasTeamAccess]
   );
 
   const toggleChatReaction: DataCtx["toggleChatReaction"] = useCallback(
@@ -2227,7 +2334,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       ? []
       : displayNotifications.filter(
           (notification) => {
-            if (notification.recipientUserId && notification.recipientUserId !== currentUser.id) return false;
+            if (notification.recipientUserId) return notification.recipientUserId === currentUser.id;
+            if (notification.kind !== "deadline") return false;
             if (isCompanyLevelUser) return true;
             if (!notification.team) return (currentUser.workspaceIds ?? []).includes(COMPANY_WORKSPACE_ID);
             return (currentUser.teams ?? [currentUser.team]).includes(notification.team);
