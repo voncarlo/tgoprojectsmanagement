@@ -19,7 +19,7 @@ interface FloatingChatProps {
 
 export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
   const { currentUser, userList } = useAuth();
-  const { chats, sendChatMessage, updateChatMessage, removeChatMessage, markChatsRead, toggleChatReaction } = useData();
+  const { chats, sendChatMessage, updateChatMessage, removeChatMessage, markChatsRead, getUnreadChatCountForContact, toggleChatReaction } = useData();
   const contacts = userList.filter((user) => user.id !== currentUser.id && user.status === "Active");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -61,10 +61,10 @@ export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
             (entry.senderId === user.id && entry.recipientId === currentUser.id)
         );
         const lastMessage = convo[convo.length - 1];
-        const unreadCount = convo.filter((entry) => entry.senderId === user.id).length;
+        const unreadCount = getUnreadChatCountForContact(user.id);
         return { user, lastMessage, unreadCount };
       }),
-    [chats, currentUser.id, filteredContacts]
+    [chats, currentUser.id, filteredContacts, getUnreadChatCountForContact]
   );
 
   const selectedUser = contacts.find((user) => user.id === selectedId) ?? null;
@@ -82,8 +82,9 @@ export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
   );
 
   useEffect(() => {
-    if (open) markChatsRead();
-  }, [markChatsRead, open, selectedId]);
+    if (!open || !selectedUser) return;
+    markChatsRead(selectedUser.id);
+  }, [markChatsRead, open, selectedUser]);
 
   const submit = () => {
     if (!selectedUser || (!message.trim() && !attachment)) return;
@@ -338,7 +339,10 @@ export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
                 <button
                   key={user.id}
                   type="button"
-                  onClick={() => setSelectedId(user.id)}
+                  onClick={() => {
+                    setSelectedId(user.id);
+                    markChatsRead(user.id);
+                  }}
                   className={cn(
                     "flex w-full items-center gap-3 border-b border-border/60 px-4 py-3 text-left transition-smooth hover:bg-muted/35",
                     selectedUser?.id === user.id && "bg-primary/5"

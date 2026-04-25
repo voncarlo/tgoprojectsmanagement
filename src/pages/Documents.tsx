@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FileText, Search, Upload, Download, FolderOpen, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/portal/EmptyState";
 import { useData } from "@/store/DataContext";
 import { toast } from "sonner";
+import { useSearchParams } from "react-router-dom";
 
 const CATEGORY_TONE: Record<DocumentFile["category"], string> = {
   SOP: "bg-info/10 text-info border-info/20",
@@ -29,6 +30,7 @@ const CATEGORIES: (DocumentFile["category"] | "All")[] = ["All", "SOP", "Report"
 const Documents = () => {
   const { visibleTeams, currentUser, can } = useAuth();
   const { documents, addDocument, removeDocument } = useData();
+  const [searchParams, setSearchParams] = useSearchParams();
   const canDeleteDocument = can("document.delete");
   const [q, setQ] = useState("");
   const [cat, setCat] = useState<typeof CATEGORIES[number]>("All");
@@ -39,7 +41,9 @@ const Documents = () => {
   const [size, setSize] = useState("250 KB");
   const [fileDataUrl, setFileDataUrl] = useState("");
   const [fileMimeType, setFileMimeType] = useState("");
+  const [selectedDocument, setSelectedDocument] = useState<DocumentFile | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const requestedDocumentId = searchParams.get("document");
 
   const filtered = useMemo(() => documents.filter((doc) =>
     visibleTeams.includes(doc.team) &&
@@ -102,6 +106,29 @@ const Documents = () => {
     link.download = doc.name;
     link.click();
   };
+  const clearDocumentDeepLink = () => {
+    if (!requestedDocumentId) return;
+    setSearchParams((params) => {
+      const next = new URLSearchParams(params);
+      next.delete("document");
+      return next;
+    }, { replace: true });
+  };
+
+  useEffect(() => {
+    if (!requestedDocumentId) return;
+    const requestedDocument = documents.find((doc) => doc.id === requestedDocumentId && visibleTeams.includes(doc.team));
+    if (!requestedDocument) {
+      toast.error("This item may have been deleted or is no longer available.");
+      setSearchParams((params) => {
+        const next = new URLSearchParams(params);
+        next.delete("document");
+        return next;
+      }, { replace: true });
+      return;
+    }
+    if (selectedDocument?.id !== requestedDocument.id) setSelectedDocument(requestedDocument);
+  }, [documents, requestedDocumentId, selectedDocument?.id, setSearchParams, visibleTeams]);
 
   return (
     <div className="space-y-6">
@@ -160,13 +187,13 @@ const Documents = () => {
                 return (
                   <tr key={doc.id} className="border-t border-border hover:bg-muted/30 transition-smooth">
                     <td className="p-3">
-                      <div className="flex items-center gap-2">
+                      <button type="button" className="flex items-center gap-2 text-left" onClick={() => setSelectedDocument(doc)}>
                         <div className="h-8 w-8 rounded-md bg-muted flex items-center justify-center"><FileText className="h-4 w-4 text-muted-foreground" /></div>
                         <div>
                           <p className="text-xs font-medium">{doc.name}</p>
                           <p className="text-[10px] text-muted-foreground">{doc.size}</p>
                         </div>
-                      </div>
+                      </button>
                     </td>
                     <td className="p-3"><Badge variant="outline" className={cn("text-[10px]", CATEGORY_TONE[doc.category])}>{doc.category}</Badge></td>
                     <td className="p-3 text-xs">{doc.owner}</td>
@@ -246,6 +273,62 @@ const Documents = () => {
             <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
             <Button className="gradient-primary text-primary-foreground" onClick={upload}>Save document</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!selectedDocument}
+        onOpenChange={(isOpen) => {
+          if (isOpen) return;
+          setSelectedDocument(null);
+          clearDocumentDeepLink();
+        }}
+      >
+        <DialogContent>
+          {selectedDocument && (() => {
+            const team = teams.find((item) => item.id === selectedDocument.team)!;
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle>{selectedDocument.name}</DialogTitle>
+                  <DialogDescription>Document details and file actions.</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-3 text-sm">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="outline" className={cn("text-[10px]", CATEGORY_TONE[selectedDocument.category])}>{selectedDocument.category}</Badge>
+                    <Badge variant="outline" className="text-[10px]">
+                      <TeamIcon team={team.id} size={12} className="mr-1.5" />
+                      {team.name}
+                    </Badge>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Owner</p>
+                      <p className="mt-1 text-xs">{selectedDocument.owner}</p>
+                    </div>
+                    <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Version</p>
+                      <p className="mt-1 text-xs">{selectedDocument.version}</p>
+                    </div>
+                    <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Size</p>
+                      <p className="mt-1 text-xs">{selectedDocument.size}</p>
+                    </div>
+                    <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Updated</p>
+                      <p className="mt-1 text-xs">{selectedDocument.updated}</p>
+                    </div>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => { clearDocumentDeepLink(); setSelectedDocument(null); }}>Close</Button>
+                  <Button className="gradient-primary text-primary-foreground gap-1.5" onClick={() => downloadDocument(selectedDocument)}>
+                    <Download className="h-4 w-4" /> Download
+                  </Button>
+                </DialogFooter>
+              </>
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </div>

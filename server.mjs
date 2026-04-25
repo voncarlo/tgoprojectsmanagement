@@ -33,6 +33,33 @@ const sendJson = (res, statusCode, payload) => {
   res.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(payload));
 };
+const sseClients = new Set();
+let appStateRevision = 0;
+
+const sendSseEvent = (res, event, payload) => {
+  res.write(`event: ${event}\n`);
+  res.write(`data: ${JSON.stringify(payload)}\n\n`);
+};
+
+const broadcastAppStateUpdate = (payload) => {
+  appStateRevision += 1;
+  const message = {
+    channel: "app-state",
+    revision: appStateRevision,
+    serverTime: new Date().toISOString(),
+    ...payload,
+  };
+
+  sseClients.forEach((client) => {
+    try {
+      sendSseEvent(client, "app-state-updated", message);
+    } catch {
+      sseClients.delete(client);
+    }
+  });
+
+  return message;
+};
 
 const resetEmailConfigured = () => Boolean(process.env.RESEND_API_KEY && process.env.MAIL_FROM);
 
@@ -153,14 +180,48 @@ const handleApiRequest = async (req, res, pathname) => {
   }
 
   if (pathname === "/api/state/app" && req.method === "GET") {
-    sendJson(res, 200, { ok: true, data: await getStateSnapshot("app") });
+    sendJson(res, 200, { ok: true, data: await getStateSnapshot("app"), meta: { revision: appStateRevision } });
     return true;
   }
 
   if (pathname === "/api/state/app" && req.method === "PUT") {
     const body = await readJsonBody(req);
-    await saveStateSnapshot("app", body);
-    sendJson(res, 200, { ok: true });
+    const nextState = body?.state ?? body;
+    const sourceClientId =
+      typeof body?.meta?.sourceClientId === "string" && body.meta.sourceClientId.trim()
+        ? body.meta.sourceClientId.trim()
+        : undefined;
+    await saveStateSnapshot("app", nextState);
+    const event = broadcastAppStateUpdate({ sourceClientId });
+    sendJson(res, 200, { ok: true, meta: { revision: event.revision, sourceClientId: event.sourceClientId } });
+    return true;
+  }
+
+  if (pathname === "/api/realtime/app" && req.method === "GET") {
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    });
+    res.write(": connected\n\n");
+    sendSseEvent(res, "ready", { channel: "app-state", revision: appStateRevision, serverTime: new Date().toISOString() });
+    sseClients.add(res);
+
+    const heartbeat = setInterval(() => {
+      try {
+        res.write(": heartbeat\n\n");
+      } catch {
+        clearInterval(heartbeat);
+        sseClients.delete(res);
+      }
+    }, 25000);
+
+    req.on("close", () => {
+      clearInterval(heartbeat);
+      sseClients.delete(res);
+    });
+
     return true;
   }
 

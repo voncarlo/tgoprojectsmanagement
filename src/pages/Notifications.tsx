@@ -9,11 +9,12 @@ import { EmptyState } from "@/components/portal/EmptyState";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useAuth } from "@/auth/AuthContext";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 const Notifications = () => {
+  const navigate = useNavigate();
   const { currentUser } = useAuth();
-  const { notifications, markAllRead, clearNotifications } = useData();
+  const { notifications, markNotificationRead, markAllRead, clearNotifications } = useData();
   const [filter, setFilter] = useState<"all" | "unread" | "read">("all");
   const notificationsEnabled = currentUser.notificationSettings?.enabled !== false;
 
@@ -22,6 +23,10 @@ const Notifications = () => {
   ), [notifications, filter]);
 
   const unread = notifications.filter((n) => !n.read).length;
+  const openNotification = (notificationId: string, link?: string) => {
+    markNotificationRead(notificationId);
+    navigate(link ?? "/notifications");
+  };
 
   return (
     <div className="space-y-6">
@@ -65,7 +70,19 @@ const Notifications = () => {
       ) : (
         <Card className="max-h-[70vh] overflow-y-auto divide-y divide-border">
           {list.map((n) => (
-            <div key={n.id} className={cn("flex items-start gap-3 p-4 hover:bg-muted/30 transition-smooth", !n.read && "bg-primary/[0.03]")}>
+            <div
+              key={n.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => openNotification(n.id, n.link)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  openNotification(n.id, n.link);
+                }
+              }}
+              className={cn("flex w-full items-start gap-3 p-4 text-left hover:bg-muted/30 transition-smooth", !n.read && "bg-primary/[0.03]")}
+            >
               <div className={cn("h-9 w-9 rounded-full flex items-center justify-center text-[11px] font-semibold shrink-0",
                 !n.read ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
                 {n.user.split(" ").map((p) => p[0]).join("").slice(0, 2)}
@@ -84,8 +101,16 @@ const Notifications = () => {
                   <span>{n.time}</span>
                 </div>
               </div>
-              <Button asChild variant="ghost" size="sm" className="shrink-0">
-                <Link to={n.link ?? "/notifications"}>Open</Link>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="shrink-0"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  openNotification(n.id, n.link);
+                }}
+              >
+                Open
               </Button>
               {!n.read && <span className="h-2 w-2 rounded-full bg-primary mt-2" />}
             </div>

@@ -55,7 +55,7 @@ export const Topbar = () => {
   const navigate = useNavigate();
   const meta = titles[pathname] ?? titles["/dashboard"];
   const { currentUser, signOut, activeWorkspace, isAdmin } = useAuth();
-  const { notifications, unreadCount, markAllRead, clearNotifications } = useData();
+  const { notifications, unreadCount, markNotificationRead, markAllRead, clearNotifications } = useData();
   const { theme, toggleTheme } = useTheme();
   const team = isAdmin ? "Company-level access" : teams.find((item) => item.id === currentUser.team)?.name ?? currentUser.team;
   const [quickOpen, setQuickOpen] = useState(false);
@@ -78,6 +78,11 @@ export const Topbar = () => {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  const openNotification = (notificationId: string, link?: string) => {
+    markNotificationRead(notificationId);
+    navigate(link ?? "/notifications");
+  };
 
   return (
     <>
@@ -175,7 +180,7 @@ export const Topbar = () => {
                   <div className="p-4 text-xs text-center text-muted-foreground">You're all caught up.</div>
                 )}
                 {notifications.slice(0, 8).map((item) => (
-                  <DropdownMenuItem key={item.id} className="flex items-start gap-2 py-2.5">
+                  <DropdownMenuItem key={item.id} className="flex items-start gap-2 py-2.5" onClick={() => openNotification(item.id, item.link)}>
                     {!item.read && <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-accent shrink-0" />}
                     <div className="flex flex-col items-start gap-0.5 flex-1">
                       <span className="text-xs">

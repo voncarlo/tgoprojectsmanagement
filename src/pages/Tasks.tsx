@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,7 @@ import { PageHeader } from "@/components/portal/PageHeader";
 import { TeamIcon } from "@/components/portal/TeamIcon";
 import { ReactionBar } from "@/components/portal/ReactionBar";
 import { insertMentionAtCursor, MENTION_QUERY_REGEX, renderMentionText } from "@/lib/social";
+import { useSearchParams } from "react-router-dom";
 
 const STATUSES: TaskStatus[] = ["Not Started", "In Progress", "Waiting Review", "On Hold", "Blocked", "Completed"];
 const PRIORITIES: Priority[] = ["Low", "Medium", "High", "Urgent", "Critical"];
@@ -67,6 +68,7 @@ const Tasks = () => {
   const { visibleTeams, currentUser, can, userList } = useAuth();
   const { tasks, taskComments, updateTask, removeTask, addTask, decideTaskApproval, addTaskApprovalComment, addTaskComment, toggleTaskCommentReaction } = useData();
   const { isManager } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const teamsVisible = teams.filter((t) => visibleTeams.includes(t.id));
   const canDeleteTask = can("task.delete");
 
@@ -81,6 +83,8 @@ const Tasks = () => {
   const [dragId, setDragId] = useState<string | null>(null);
   const [dragOverCol, setDragOverCol] = useState<TaskStatus | null>(null);
   const [comment, setComment] = useState("");
+  const [highlightedCommentId, setHighlightedCommentId] = useState<string | null>(null);
+  const commentRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const commentMentionQuery = comment.match(MENTION_QUERY_REGEX)?.[1]?.trim().toLowerCase() ?? "";
   const mentionSuggestions = commentMentionQuery
     ? userList.filter((user) => user.id !== currentUser.id && user.name.toLowerCase().includes(commentMentionQuery)).slice(0, 5)
@@ -99,6 +103,8 @@ const Tasks = () => {
     () => (open ? taskComments.filter((entry) => entry.taskId === open.id) : []),
     [open, taskComments]
   );
+  const requestedTaskId = searchParams.get("task");
+  const requestedCommentId = searchParams.get("comment");
 
   const filtered = useMemo(() => visible.filter((t) =>
     (q === "" || t.title.toLowerCase().includes(q.toLowerCase()) || t.assignee.toLowerCase().includes(q.toLowerCase()))
@@ -181,6 +187,56 @@ const Tasks = () => {
   const insertMention = (userName: string) => {
     setComment((current) => insertMentionAtCursor(current, userName));
   };
+  const clearDeepLink = () => {
+    if (!requestedTaskId && !requestedCommentId) return;
+    setSearchParams((params) => {
+      const next = new URLSearchParams(params);
+      next.delete("task");
+      next.delete("comment");
+      return next;
+    }, { replace: true });
+  };
+
+  useEffect(() => {
+    if (!requestedTaskId) return;
+    const requestedTask = visible.find((task) => task.id === requestedTaskId);
+    if (!requestedTask) {
+      toast.error("This item may have been deleted or is no longer available.");
+      setSearchParams((params) => {
+        const next = new URLSearchParams(params);
+        next.delete("task");
+        next.delete("comment");
+        return next;
+      }, { replace: true });
+      return;
+    }
+    if (open?.id !== requestedTask.id) setOpen(requestedTask);
+  }, [open?.id, requestedTaskId, setSearchParams, visible]);
+
+  useEffect(() => {
+    if (!open || !requestedCommentId) return;
+    const targetComment = openComments.find((entry) => entry.id === requestedCommentId);
+    if (!targetComment) {
+      toast.error("This item may have been deleted or is no longer available.");
+      setSearchParams((params) => {
+        const next = new URLSearchParams(params);
+        next.delete("comment");
+        return next;
+      }, { replace: true });
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      commentRefs.current[requestedCommentId]?.scrollIntoView({ behavior: "smooth", block: "center" });
+      setHighlightedCommentId(requestedCommentId);
+    });
+    const timer = window.setTimeout(() => {
+      setHighlightedCommentId((current) => (current === requestedCommentId ? null : current));
+    }, 2500);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+    };
+  }, [open, openComments, requestedCommentId, setSearchParams]);
 
   return (
     <div className="space-y-6">
@@ -459,7 +515,15 @@ const Tasks = () => {
 
       <QuickAddDialog open={dialogOpen} onOpenChange={setDialogOpen} defaultTab="task" />
 
-      <Sheet open={!!open} onOpenChange={(o) => !o && setOpen(null)}>
+      <Sheet
+        open={!!open}
+        onOpenChange={(isOpen) => {
+          if (isOpen) return;
+          setOpen(null);
+          setHighlightedCommentId(null);
+          clearDeepLink();
+        }}
+      >
         <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
           {open && (() => {
             const team = teams.find((x) => x.id === open.team)!;
@@ -584,7 +648,16 @@ const Tasks = () => {
                   ) : (
                     <div className="space-y-3">
                       {openComments.map((entry) => (
-                        <div key={entry.id} className="rounded-xl border border-border bg-background/80 p-3">
+                        <div
+                          key={entry.id}
+                          ref={(node) => {
+                            commentRefs.current[entry.id] = node;
+                          }}
+                          className={cn(
+                            "rounded-xl border border-border bg-background/80 p-3 transition-smooth",
+                            highlightedCommentId === entry.id && "border-primary/50 bg-primary/5 shadow-soft"
+                          )}
+                        >
                           <div className="flex items-center gap-2">
                             <Avatar className="h-7 w-7"><AvatarFallback className="text-[9px] bg-primary/10 text-primary">{initials(entry.authorName)}</AvatarFallback></Avatar>
                             <div>
@@ -644,12 +717,13 @@ const Tasks = () => {
                       if (!confirmed) return;
                       removeTask(open.id);
                       toast.success("Task deleted");
+                      clearDeepLink();
                       setOpen(null);
                     }}>
                       <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete
                     </Button>
                   ) : <div />}
-                  <Button size="sm" variant="outline" onClick={() => setOpen(null)}>Close</Button>
+                  <Button size="sm" variant="outline" onClick={() => { clearDeepLink(); setOpen(null); }}>Close</Button>
                 </div>
               </div>
             );

@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   tasks as seedTasks,
   projects as seedProjects,
@@ -36,8 +36,11 @@ interface Notification extends Activity {
   preview?: string;
   link?: string;
   workspaceLabel?: string;
-  entityType?: "task" | "project" | "approval" | "comment" | "event" | "chat";
+  entityType?: "task" | "project" | "document" | "approval" | "comment" | "event" | "chat";
   entityId?: string;
+  targetType?: "task" | "project" | "document" | "comment" | "chat";
+  targetId?: string;
+  parentId?: string;
   topic?: "task" | "project" | "approval" | "comment" | "mention" | "status" | "calendar" | "deadline" | "chat";
 }
 
@@ -85,19 +88,46 @@ export interface PersonalNote {
   updatedAt: string;
 }
 
-const fetchServerState = async (): Promise<PersistedDataState | null> => {
+interface ServerStateMeta {
+  revision: number;
+  sourceClientId?: string;
+}
+
+interface ServerStateResponse {
+  data: PersistedDataState | null;
+  meta: ServerStateMeta;
+}
+
+const fetchServerState = async (): Promise<ServerStateResponse> => {
   const response = await fetch("/api/state/app");
-  if (!response.ok) return null;
-  const payload = (await response.json()) as { ok: boolean; data?: PersistedDataState | null };
-  return payload.data ?? null;
+  if (!response.ok) return { data: null, meta: { revision: 0 } };
+  const payload = (await response.json()) as { ok: boolean; data?: PersistedDataState | null; meta?: Partial<ServerStateMeta> };
+  return {
+    data: payload.data ?? null,
+    meta: {
+      revision: typeof payload.meta?.revision === "number" ? payload.meta.revision : 0,
+      sourceClientId: payload.meta?.sourceClientId,
+    },
+  };
 };
 
-const saveServerState = async (state: PersistedDataState) => {
-  await fetch("/api/state/app", {
+const saveServerState = async (state: PersistedDataState, sourceClientId: string): Promise<ServerStateMeta> => {
+  const response = await fetch("/api/state/app", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(state),
+    body: JSON.stringify({
+      state,
+      meta: {
+        sourceClientId,
+      },
+    }),
   });
+  if (!response.ok) return { revision: 0 };
+  const payload = (await response.json()) as { ok: boolean; meta?: Partial<ServerStateMeta> };
+  return {
+    revision: typeof payload.meta?.revision === "number" ? payload.meta.revision : 0,
+    sourceClientId: payload.meta?.sourceClientId,
+  };
 };
 
 export interface RecycleBinItem {
@@ -124,7 +154,7 @@ interface PersistedDataState {
   recycleBin: RecycleBinItem[];
   chats: ChatMessage[];
   taskComments: TaskComment[];
-  chatReadAtByUser: Record<string, string>;
+  chatReadAtByUser: Record<string, Record<string, string>>;
   personalNotes: PersonalNote[];
 }
 
@@ -161,6 +191,7 @@ interface DataCtx {
         kind?: Notification["kind"];
       }
   ) => void;
+  markNotificationRead: (notificationId: string) => void;
   markAllRead: () => void;
   clearNotifications: () => void;
   decideTaskApproval: (
@@ -187,7 +218,8 @@ interface DataCtx {
   removeCalendarEvent: (id: string) => void;
   requestCalendarPto: (event: Omit<CalendarEvent, "id">) => void;
   clearAuditLog: () => void;
-  markChatsRead: () => void;
+  markChatsRead: (partnerId?: string) => void;
+  getUnreadChatCountForContact: (partnerId: string) => number;
   sendChatMessage: (
     recipientId: string,
     body: string,
@@ -204,9 +236,22 @@ interface DataCtx {
 }
 
 const STORAGE_KEY = "tgo.data";
+const REALTIME_CLIENT_ID_STORAGE_KEY = "tgo.data.realtimeClientId";
 const Ctx = createContext<DataCtx | null>(null);
 
 const id = (prefix: string) => prefix + Math.random().toString(36).slice(2, 8);
+const createRealtimeClientId = () =>
+  typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `client-${Math.random().toString(36).slice(2, 10)}`;
+const getRealtimeClientId = () => {
+  if (typeof window === "undefined") return createRealtimeClientId();
+  const existing = window.localStorage.getItem(REALTIME_CLIENT_ID_STORAGE_KEY);
+  if (existing) return existing;
+  const nextId = createRealtimeClientId();
+  window.localStorage.setItem(REALTIME_CLIENT_ID_STORAGE_KEY, nextId);
+  return nextId;
+};
 const nowLabel = () => "Just now";
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
@@ -352,6 +397,36 @@ const notificationTitle = (topic?: Notification["topic"]) => {
 };
 const shouldCreateNotification = (topic?: Notification["topic"], kind?: Notification["kind"]) =>
   kind === "deadline" || ["task", "project", "approval", "comment", "mention", "status", "calendar", "chat"].includes(topic ?? "");
+const buildQueryString = (entries: Array<[string, string | undefined]>) => {
+  const params = new URLSearchParams();
+  entries.forEach(([key, value]) => {
+    if (value) params.set(key, value);
+  });
+  const query = params.toString();
+  return query ? `?${query}` : "";
+};
+const buildNotificationLink = (
+  notification: Pick<Notification, "link" | "targetType" | "targetId" | "parentId" | "entityType" | "entityId" | "topic">
+) => {
+  const targetType = notification.targetType ?? notification.entityType;
+  const targetId = notification.targetId ?? notification.entityId;
+  switch (targetType) {
+    case "task":
+      return targetId ? `/tasks${buildQueryString([["task", targetId]])}` : notification.link ?? "/tasks";
+    case "project":
+      return targetId ? `/projects${buildQueryString([["project", targetId]])}` : notification.link ?? "/projects";
+    case "document":
+      return targetId ? `/documents${buildQueryString([["document", targetId]])}` : notification.link ?? "/documents";
+    case "comment":
+      return `/tasks${buildQueryString([["task", notification.parentId], ["comment", targetId]])}`;
+    case "chat":
+      return `/chat${buildQueryString([["chat", notification.parentId]])}`;
+    default:
+      return notification.link ?? defaultNotificationLink(notification.entityType, notification.topic);
+  }
+};
+const getChatPartnerId = (message: ChatMessage, userId: string) =>
+  message.senderId === userId ? message.recipientId : message.recipientId === userId ? message.senderId : null;
 
 export const DataProvider = ({ children }: { children: ReactNode }) => {
   const auth = useAuth();
@@ -368,6 +443,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const canDirectTaskCreate = auth.can("task.create");
   const canDirectProjectCreate = auth.can("project.create");
   const initialState = loadState();
+  const realtimeClientIdRef = useRef(getRealtimeClientId());
+  const latestServerRevisionRef = useRef(0);
+  const skipNextServerSaveRef = useRef(false);
 
   const [tasks, setTasks] = useState<Task[]>(initialState.tasks);
   const [projects, setProjects] = useState<Project[]>(initialState.projects);
@@ -380,68 +458,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [recycleBin, setRecycleBin] = useState<RecycleBinItem[]>(initialState.recycleBin);
   const [chats, setChats] = useState<ChatMessage[]>(initialState.chats);
   const [taskComments, setTaskComments] = useState<TaskComment[]>(initialState.taskComments);
-  const [chatReadAtByUser, setChatReadAtByUser] = useState<Record<string, string>>(initialState.chatReadAtByUser);
+  const [chatReadAtByUser, setChatReadAtByUser] = useState<Record<string, Record<string, string>>>(initialState.chatReadAtByUser);
   const [personalNotes, setPersonalNotes] = useState<PersonalNote[]>(initialState.personalNotes);
   const [serverHydrated, setServerHydrated] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        tasks,
-        projects,
-        notifications,
-        approvals,
-        documents,
-        automations,
-        auditLog,
-        calendarEvents,
-        recycleBin,
-        chats,
-        taskComments,
-        chatReadAtByUser,
-        personalNotes,
-      } satisfies PersistedDataState)
-    );
-  }, [tasks, projects, notifications, approvals, documents, automations, auditLog, calendarEvents, recycleBin, chats, taskComments, chatReadAtByUser, personalNotes]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const hydrate = async () => {
-      try {
-        const remoteState = await fetchServerState();
-        if (!remoteState || cancelled) return;
-        setTasks(remoteState.tasks ?? defaultState.tasks);
-        setProjects(remoteState.projects ?? defaultState.projects);
-        setNotifications(remoteState.notifications ?? defaultState.notifications);
-        setApprovals(remoteState.approvals ?? defaultState.approvals);
-        setDocuments(remoteState.documents ?? defaultState.documents);
-        setAutomations(remoteState.automations ?? defaultState.automations);
-        setAuditLog(remoteState.auditLog ?? defaultState.auditLog);
-        setCalendarEvents(remoteState.calendarEvents ?? defaultState.calendarEvents);
-        setRecycleBin(remoteState.recycleBin ?? []);
-        setChats(remoteState.chats ?? []);
-        setTaskComments(remoteState.taskComments ?? []);
-        setChatReadAtByUser(remoteState.chatReadAtByUser ?? defaultState.chatReadAtByUser);
-        setPersonalNotes(remoteState.personalNotes ?? []);
-      } catch {
-        // Fallback to local cache when the API is unavailable.
-      } finally {
-        if (!cancelled) setServerHydrated(true);
-      }
-    };
-
-    void hydrate();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!serverHydrated) return;
-    void saveServerState({
+  const persistedState = useMemo<PersistedDataState>(
+    () => ({
       tasks,
       projects,
       notifications,
@@ -455,8 +476,117 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       taskComments,
       chatReadAtByUser,
       personalNotes,
+    }),
+    [approvals, auditLog, automations, calendarEvents, chats, chatReadAtByUser, documents, notifications, personalNotes, projects, recycleBin, taskComments, tasks]
+  );
+  const applyRemoteState = useCallback((remoteState: PersistedDataState, revision = 0) => {
+    skipNextServerSaveRef.current = true;
+    latestServerRevisionRef.current = Math.max(latestServerRevisionRef.current, revision);
+    setTasks(remoteState.tasks ?? defaultState.tasks);
+    setProjects(remoteState.projects ?? defaultState.projects);
+    setNotifications(remoteState.notifications ?? defaultState.notifications);
+    setApprovals(remoteState.approvals ?? defaultState.approvals);
+    setDocuments(remoteState.documents ?? defaultState.documents);
+    setAutomations(remoteState.automations ?? defaultState.automations);
+    setAuditLog(remoteState.auditLog ?? defaultState.auditLog);
+    setCalendarEvents(remoteState.calendarEvents ?? defaultState.calendarEvents);
+    setRecycleBin(remoteState.recycleBin ?? []);
+    setChats(remoteState.chats ?? []);
+    setTaskComments(remoteState.taskComments ?? []);
+    setChatReadAtByUser(remoteState.chatReadAtByUser ?? defaultState.chatReadAtByUser);
+    setPersonalNotes(remoteState.personalNotes ?? []);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(persistedState));
+  }, [persistedState]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const hydrate = async () => {
+      try {
+        const remote = await fetchServerState();
+        if (!remote.data || cancelled) return;
+        applyRemoteState(remote.data, remote.meta.revision);
+      } catch {
+        // Fallback to local cache when the API is unavailable.
+      } finally {
+        if (!cancelled) setServerHydrated(true);
+      }
+    };
+
+    void hydrate();
+    return () => {
+      cancelled = true;
+    };
+  }, [applyRemoteState]);
+
+  useEffect(() => {
+    if (!serverHydrated) return;
+    if (skipNextServerSaveRef.current) {
+      skipNextServerSaveRef.current = false;
+      return;
+    }
+    void saveServerState(persistedState, realtimeClientIdRef.current).then((meta) => {
+      if (meta.revision > 0) latestServerRevisionRef.current = Math.max(latestServerRevisionRef.current, meta.revision);
     });
-  }, [approvals, auditLog, automations, calendarEvents, chats, chatReadAtByUser, documents, notifications, personalNotes, projects, recycleBin, serverHydrated, taskComments, tasks]);
+  }, [persistedState, serverHydrated]);
+
+  useEffect(() => {
+    if (!serverHydrated || typeof window === "undefined") return;
+
+    let closed = false;
+    let eventSource: EventSource | null = null;
+
+    const syncIfNewer = async (expectedRevision?: number) => {
+      try {
+        const remote = await fetchServerState();
+        if (!remote.data) return;
+        const remoteRevision = remote.meta.revision ?? 0;
+        if (expectedRevision && remoteRevision < expectedRevision) return;
+        if (remoteRevision <= latestServerRevisionRef.current) return;
+        applyRemoteState(remote.data, remoteRevision);
+      } catch {
+        // Polling fallback will try again on the next interval.
+      }
+    };
+
+    try {
+      eventSource = new EventSource("/api/realtime/app");
+      eventSource.addEventListener("ready", (event) => {
+        const payload = JSON.parse((event as MessageEvent<string>).data) as { revision?: number };
+        latestServerRevisionRef.current = Math.max(latestServerRevisionRef.current, payload.revision ?? 0);
+      });
+      eventSource.addEventListener("app-state-updated", (event) => {
+        const payload = JSON.parse((event as MessageEvent<string>).data) as { revision?: number; sourceClientId?: string };
+        const revision = payload.revision ?? 0;
+        if (payload.sourceClientId === realtimeClientIdRef.current) {
+          latestServerRevisionRef.current = Math.max(latestServerRevisionRef.current, revision);
+          return;
+        }
+        void syncIfNewer(revision);
+      });
+      eventSource.onerror = () => {
+        eventSource?.close();
+        eventSource = null;
+      };
+    } catch {
+      eventSource = null;
+    }
+
+    const poller = window.setInterval(() => {
+      if (closed) return;
+      void syncIfNewer();
+    }, 5000);
+
+    return () => {
+      closed = true;
+      window.clearInterval(poller);
+      eventSource?.close();
+    };
+  }, [applyRemoteState, serverHydrated]);
 
   useEffect(() => {
     const notificationsEnabled = currentUser.notificationSettings?.enabled ?? true;
@@ -558,7 +688,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           topic,
           title: activity.title ?? notificationTitle(topic),
           preview: activity.preview ?? `${activity.user} ${activity.action} ${activity.target}`.trim(),
-          link: activity.link ?? defaultNotificationLink(activity.entityType, topic),
+          link: buildNotificationLink({ ...activity, topic }),
           workspaceLabel: activity.workspaceLabel ?? departmentLabel(team),
         },
         ...items,
@@ -583,7 +713,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           topic,
           title: activity.title ?? notificationTitle(topic),
           preview: activity.preview ?? `${activity.user} ${activity.action} ${activity.target}`.trim(),
-          link: activity.link ?? defaultNotificationLink(activity.entityType, topic),
+          link: buildNotificationLink({ ...activity, topic }),
           workspaceLabel: activity.workspaceLabel ?? departmentLabel(team),
         },
         ...items,
@@ -664,7 +794,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
       const next = buildTaskRecord(normalizedTask);
       setTasks((items) => [next, ...items]);
-      pushActivity({ user: currentUser.name, action: "created task", target: next.title });
+      pushActivity({ user: currentUser.name, action: "created task", target: next.title, targetType: "task", targetId: next.id });
       appendAudit({
         user: currentUser.name,
         action: "Created task",
@@ -728,6 +858,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           user: currentUser.name,
           action: "submitted for approval",
           target: updatedTask.title,
+          targetType: "task",
+          targetId: updatedTask.id,
         });
         appendAudit({
           user: currentUser.name,
@@ -761,6 +893,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             user: currentUser.name,
             action: patch.status === "Completed" ? "completed task" : `moved to ${patch.status}`,
             target: updatedTask.title,
+            targetType: "task",
+            targetId: updatedTask.id,
         });
         appendAudit({
           user: currentUser.name,
@@ -795,7 +929,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         category: "Task",
         team: existing.team,
       });
-      pushActivity({ user: currentUser.name, action: "deleted task", target: existing.title });
+      pushActivity({ user: currentUser.name, action: "deleted task", target: existing.title, targetType: "task", targetId: existing.id });
     },
     [addToRecycleBin, appendAudit, currentUser.name, pushActivity, tasks]
   );
@@ -851,7 +985,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         approvalHistory: [],
       };
       setProjects((items) => [next, ...items]);
-      pushActivity({ user: currentUser.name, action: "created project", target: next.name });
+      pushActivity({ user: currentUser.name, action: "created project", target: next.name, targetType: "project", targetId: next.id });
       appendAudit({
         user: currentUser.name,
         action: "Created project",
@@ -910,6 +1044,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           user: currentUser.name,
           action: "submitted project for approval",
           target: updatedProject.name,
+          targetType: "project",
+          targetId: updatedProject.id,
         });
         appendAudit({
           user: currentUser.name,
@@ -949,6 +1085,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           user: currentUser.name,
           action: patch.status === "Completed" ? "completed project" : `updated project to ${patch.status}`,
           target: updatedProject.name,
+          targetType: "project",
+          targetId: updatedProject.id,
         });
       }
     },
@@ -975,7 +1113,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         category: "Project",
         team: existing.team,
       });
-      pushActivity({ user: currentUser.name, action: "deleted project", target: existing.name });
+      pushActivity({ user: currentUser.name, action: "deleted project", target: existing.name, targetType: "project", targetId: existing.id });
     },
     [addToRecycleBin, appendAudit, currentUser.name, projects, pushActivity]
   );
@@ -1022,6 +1160,19 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       )
     );
   }, [currentUser.id]);
+
+  const markNotificationRead = useCallback(
+    (notificationId: string) => {
+      setNotifications((items) =>
+        items.map((item) =>
+          item.id === notificationId && (!item.recipientUserId || item.recipientUserId === currentUser.id)
+            ? { ...item, read: true }
+            : item
+        )
+      );
+    },
+    [currentUser.id]
+  );
 
   const clearNotifications = useCallback(() => {
     setNotifications((items) =>
@@ -1213,7 +1364,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         category: "File",
         team: next.team,
       });
-      pushActivity({ user: currentUser.name, action: "uploaded file", target: next.name });
+      pushActivity({ user: currentUser.name, action: "uploaded file", target: next.name, targetType: "document", targetId: next.id, entityType: "document", entityId: next.id });
       return next;
     },
     [appendAudit, currentUser.name, pushActivity]
@@ -1239,7 +1390,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         category: "File",
         team: existing.team,
       });
-      pushActivity({ user: currentUser.name, action: "deleted document", target: existing.name });
+      pushActivity({ user: currentUser.name, action: "deleted document", target: existing.name, targetType: "document", targetId: existing.id, entityType: "document", entityId: existing.id });
     },
     [addToRecycleBin, appendAudit, currentUser.name, documents, pushActivity]
   );
@@ -1571,9 +1722,45 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     setAuditLog([]);
   }, []);
 
-  const markChatsRead: DataCtx["markChatsRead"] = useCallback(() => {
-    setChatReadAtByUser((items) => ({ ...items, [currentUser.id]: new Date().toISOString() }));
-  }, [currentUser.id]);
+  const markChatsRead: DataCtx["markChatsRead"] = useCallback(
+    (partnerId) => {
+      const now = new Date().toISOString();
+      setChatReadAtByUser((items) => {
+        const existing = items[currentUser.id] ?? {};
+        if (partnerId) {
+          return {
+            ...items,
+            [currentUser.id]: {
+              ...existing,
+              [partnerId]: now,
+            },
+          };
+        }
+
+        const partnerIds = chats
+          .map((entry) => getChatPartnerId(entry, currentUser.id))
+          .filter((entry): entry is string => Boolean(entry));
+        const nextReadMap = { ...existing };
+        partnerIds.forEach((entry) => {
+          nextReadMap[entry] = now;
+        });
+        return { ...items, [currentUser.id]: nextReadMap };
+      });
+    },
+    [chats, currentUser.id]
+  );
+
+  const getUnreadChatCountForContact = useCallback(
+    (partnerId: string) => {
+      const lastReadAt = chatReadAtByUser[currentUser.id]?.[partnerId];
+      return chats.filter((entry) => {
+        if (entry.senderId !== partnerId || entry.recipientId !== currentUser.id) return false;
+        if (!lastReadAt) return true;
+        return new Date(entry.createdAt).getTime() > new Date(lastReadAt).getTime();
+      }).length;
+    },
+    [chatReadAtByUser, chats, currentUser.id]
+  );
 
   const sendChatMessage: DataCtx["sendChatMessage"] = useCallback(
     (recipientId, body, attachment) => {
@@ -1605,9 +1792,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         target: recipient.name,
         recipientUserId: recipient.id,
         topic: "chat",
+        targetType: "chat",
+        targetId: message.id,
+        parentId: currentUser.id,
         entityType: "chat",
         entityId: message.id,
-        link: "/chat",
         preview: text || attachment?.name || "Attachment",
         workspaceLabel: "Direct message",
       });
@@ -1620,9 +1809,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             target: recipient.name,
             recipientUserId: user.id,
             topic: "mention",
+            targetType: "chat",
+            targetId: message.id,
+            parentId: currentUser.id,
             entityType: "chat",
             entityId: message.id,
-            link: "/chat",
             preview: text || attachment?.name || "Attachment",
             workspaceLabel: "Direct message",
           });
@@ -1679,10 +1870,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         action: "commented on",
         target: task.title,
         team: task.team,
+        targetType: "comment",
+        targetId: nextComment.id,
+        parentId: task.id,
         topic: "comment",
         entityType: "comment",
         entityId: nextComment.id,
-        link: "/tasks",
         preview: text,
       });
       mentionedUsers.forEach((user) => {
@@ -1692,10 +1885,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           target: task.title,
           team: task.team,
           recipientUserId: user.id,
+          targetType: "comment",
+          targetId: nextComment.id,
+          parentId: task.id,
           topic: "mention",
           entityType: "comment",
           entityId: nextComment.id,
-          link: "/tasks",
           preview: text,
         });
       });
@@ -1914,7 +2109,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     () =>
       filteredChats.filter((entry) => {
         if (entry.recipientId !== currentUser.id || entry.senderId === currentUser.id) return false;
-        const lastReadAt = chatReadAtByUser[currentUser.id];
+        const partnerId = getChatPartnerId(entry, currentUser.id);
+        if (!partnerId) return false;
+        const lastReadAt = chatReadAtByUser[currentUser.id]?.[partnerId];
         if (!lastReadAt) return true;
         return new Date(entry.createdAt).getTime() > new Date(lastReadAt).getTime();
       }).length,
@@ -1949,6 +2146,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       toggleMilestone,
       pushActivity,
       pushNotification,
+      markNotificationRead,
       markAllRead,
       clearNotifications,
       decideTaskApproval,
@@ -1968,6 +2166,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       requestCalendarPto,
       clearAuditLog,
       markChatsRead,
+      getUnreadChatCountForContact,
       sendChatMessage,
       updateChatMessage,
       removeChatMessage,
@@ -2004,6 +2203,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       toggleMilestone,
       pushActivity,
       pushNotification,
+      markNotificationRead,
       markAllRead,
       clearNotifications,
       decideTaskApproval,
@@ -2023,6 +2223,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       requestCalendarPto,
       clearAuditLog,
       markChatsRead,
+      getUnreadChatCountForContact,
       sendChatMessage,
       updateChatMessage,
       removeChatMessage,

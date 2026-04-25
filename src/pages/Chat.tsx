@@ -13,10 +13,12 @@ import { toast } from "sonner";
 import { teams } from "@/data/mock";
 import { ReactionBar } from "@/components/portal/ReactionBar";
 import { insertMentionAtCursor, MENTION_QUERY_REGEX, renderMentionText } from "@/lib/social";
+import { useSearchParams } from "react-router-dom";
 
 const Chat = () => {
   const { currentUser, userList } = useAuth();
-  const { chats, sendChatMessage, updateChatMessage, removeChatMessage, markChatsRead, toggleChatReaction } = useData();
+  const { chats, sendChatMessage, updateChatMessage, removeChatMessage, markChatsRead, getUnreadChatCountForContact, toggleChatReaction } = useData();
+  const [searchParams, setSearchParams] = useSearchParams();
   const contacts = userList.filter((user) => user.id !== currentUser.id && user.status === "Active");
   const [selectedId, setSelectedId] = useState(contacts[0]?.id ?? "");
   const [message, setMessage] = useState("");
@@ -54,8 +56,25 @@ const Chat = () => {
   );
 
   useEffect(() => {
-    markChatsRead();
-  }, [markChatsRead, selectedId]);
+    const targetChatId = searchParams.get("chat");
+    if (!targetChatId) return;
+    const targetExists = contacts.some((user) => user.id === targetChatId);
+    if (!targetExists) {
+      toast.error("This item may have been deleted or is no longer available.");
+      setSearchParams((params) => {
+        const next = new URLSearchParams(params);
+        next.delete("chat");
+        return next;
+      }, { replace: true });
+      return;
+    }
+    if (targetChatId !== selectedId) setSelectedId(targetChatId);
+  }, [contacts, searchParams, selectedId, setSearchParams]);
+
+  useEffect(() => {
+    if (!selectedUser) return;
+    markChatsRead(selectedUser.id);
+  }, [markChatsRead, selectedUser]);
 
   const submit = () => {
     if (!selectedUser || (!message.trim() && !attachment)) return;
@@ -122,8 +141,15 @@ const Chat = () => {
                     <AvatarImage src={user.avatarUrl} alt={user.name} />
                     <AvatarFallback className="bg-primary/10 text-primary font-semibold">{user.initials}</AvatarFallback>
                   </Avatar>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{user.name}</p>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-sm font-medium">{user.name}</p>
+                      {getUnreadChatCountForContact(user.id) > 0 && (
+                        <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">
+                          {getUnreadChatCountForContact(user.id)}
+                        </span>
+                      )}
+                    </div>
                     <p className="truncate text-xs text-muted-foreground">{departmentLabel(user.team)}</p>
                   </div>
                 </div>

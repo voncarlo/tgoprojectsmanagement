@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ import { useData } from "@/store/DataContext";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { canFullyAccessProject, getProjectMembers } from "@/lib/project-access";
+import { useSearchParams } from "react-router-dom";
 
 const PROJECT_STATUSES: ProjectStatus[] = ["Planning", "Active", "At Risk", "Delayed", "On Hold", "Waiting Review", "Completed"];
 
@@ -49,6 +50,7 @@ const sortProjectSubtasks = (subtasks: Subtask[]) => [...subtasks].sort((left, r
 const Projects = () => {
   const { visibleTeams, currentUser, isManager, can, userList } = useAuth();
   const { allProjects, removeProject, updateProject, decideProjectApproval } = useData();
+  const [searchParams, setSearchParams] = useSearchParams();
   const teamsVisible = teams.filter((team) => visibleTeams.includes(team.id));
   const [filter, setFilter] = useState<string>("all");
   const [open, setOpen] = useState(false);
@@ -59,6 +61,7 @@ const Projects = () => {
   const [pendingCoOwner, setPendingCoOwner] = useState("");
   const list = allProjects.filter((project) => filter === "all" || project.team === filter);
   const canDeleteProjects = can("project.delete");
+  const requestedProjectId = searchParams.get("project");
 
   const openProject = (project: Project) => {
     setSelectedProject(project);
@@ -117,6 +120,21 @@ const Projects = () => {
       ...(nextStatus !== selectedProject.status ? { status: nextStatus } : {}),
     });
   };
+
+  useEffect(() => {
+    if (!requestedProjectId) return;
+    const requestedProject = allProjects.find((project) => project.id === requestedProjectId);
+    if (!requestedProject) {
+      toast.error("This item may have been deleted or is no longer available.");
+      setSearchParams((params) => {
+        const next = new URLSearchParams(params);
+        next.delete("project");
+        return next;
+      }, { replace: true });
+      return;
+    }
+    if (selectedProject?.id !== requestedProject.id || !open) openProject(requestedProject);
+  }, [allProjects, open, requestedProjectId, selectedProject?.id, setSearchParams]);
 
   return (
     <div className="space-y-6">
@@ -225,7 +243,18 @@ const Projects = () => {
 
       <QuickAddDialog open={createOpen} onOpenChange={setCreateOpen} defaultTab="project" />
 
-      <Sheet open={open} onOpenChange={setOpen}>
+      <Sheet
+        open={open}
+        onOpenChange={(isOpen) => {
+          setOpen(isOpen);
+          if (isOpen || !requestedProjectId) return;
+          setSearchParams((params) => {
+            const next = new URLSearchParams(params);
+            next.delete("project");
+            return next;
+          }, { replace: true });
+        }}
+      >
         <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
           {selectedProject && (() => {
             const team = teams.find((entry) => entry.id === selectedProject.team)!;
