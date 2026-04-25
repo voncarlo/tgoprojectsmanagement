@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { users as seedUsers, teams, type User, type ModuleKey, type TeamId, type NotificationSettings } from "@/data/mock";
 import { ROLE_CAPABILITIES, ROLE_MODULES, ADMIN_ONLY_MODULES, DEPARTMENT_MODULE_TO_TEAM, type Capability } from "./permissions";
 import {
