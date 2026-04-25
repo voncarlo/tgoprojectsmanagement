@@ -46,6 +46,10 @@ const getNextProjectStatus = (project: Pick<Project, "status" | "milestones" | "
 const canManageProjectWork = (project: Project, userName: string, isManager: boolean) =>
   isManager || project.owner === userName || (project.coOwners ?? []).includes(userName);
 const sortProjectSubtasks = (subtasks: Subtask[]) => [...subtasks].sort((left, right) => Number(left.done) - Number(right.done));
+const normalizeProjectForView = (project: Project): Project => ({
+  ...project,
+  subtasks: project.subtasks ? sortProjectSubtasks(project.subtasks) : project.subtasks,
+});
 
 const Projects = () => {
   const { visibleTeams, currentUser, isManager, can, userList, canDecideTeamApprovals, hasAssignedTeamLead, isAdmin } = useAuth();
@@ -64,7 +68,7 @@ const Projects = () => {
   const requestedProjectId = searchParams.get("project");
 
   const openProject = (project: Project) => {
-    setSelectedProject(project);
+    setSelectedProject(normalizeProjectForView(project));
     setApprovalComment("");
     setNewSubtaskTitle("");
     setPendingCoOwner("");
@@ -73,7 +77,11 @@ const Projects = () => {
 
   const syncProject = (patch: Partial<Project>) => {
     if (!selectedProject) return;
-    const nextProject = { ...selectedProject, ...patch };
+    const nextProject = normalizeProjectForView({
+      ...selectedProject,
+      ...patch,
+      subtasks: patch.subtasks ?? selectedProject.subtasks,
+    });
     updateProject(selectedProject.id, patch);
     setSelectedProject(nextProject);
   };
@@ -261,13 +269,17 @@ const Projects = () => {
             const isProjectOwner = selectedProject.owner === currentUser.name;
             const isProjectCoOwner = (selectedProject.coOwners ?? []).includes(currentUser.name);
             const canManageWork = isProjectOwner || isProjectCoOwner;
+            const canManageMembers = isProjectOwner || isAdmin;
             const canEditSubtasks = canManageProjectWork(selectedProject, currentUser.name, isManager);
             const canOpenFullProject = canFullyAccessProject(selectedProject, currentUser, isManager);
             const members = getProjectMembers(selectedProject);
             const canDecide = canDecideTeamApprovals(selectedProject.team);
             const showApprovalActions = canDecide && selectedProject.approvalStatus === "Pending Approval";
             const coOwnerCandidates = userList.filter((user) =>
-              user.name !== selectedProject.owner && !(selectedProject.coOwners ?? []).includes(user.name)
+              user.status === "Active" &&
+              user.name.trim() &&
+              user.name !== selectedProject.owner &&
+              !(selectedProject.coOwners ?? []).includes(user.name)
             );
 
             return (
@@ -368,14 +380,14 @@ const Projects = () => {
                 <div className="rounded-lg border border-border/60 bg-muted/20 p-3 space-y-3">
                   <div className="flex items-center justify-between">
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Members</p>
-                    {!isProjectOwner && <span className="text-[10px] text-muted-foreground">Only the team lead can manage members</span>}
+                    {!canManageMembers && <span className="text-[10px] text-muted-foreground">Only the project owner, Admin, or Super Admin can manage members</span>}
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {(selectedProject.coOwners?.length ?? 0) > 0 ? (
                       selectedProject.coOwners!.map((coOwner) => (
                         <Badge key={coOwner} variant="outline" className="gap-1.5 px-2 py-1">
                           {coOwner}
-                          {isProjectOwner && (
+                          {canManageMembers && (
                             <button
                               type="button"
                               onClick={() => syncProject({ coOwners: (selectedProject.coOwners ?? []).filter((name) => name !== coOwner) })}
@@ -388,10 +400,10 @@ const Projects = () => {
                         </Badge>
                       ))
                     ) : (
-                      <span className="text-xs text-muted-foreground">No members assigned.</span>
+                      <span className="text-xs text-muted-foreground">Only the project owner is assigned.</span>
                     )}
                   </div>
-                  {isProjectOwner && (
+                  {canManageMembers && (
                     <div className="flex flex-col gap-2 sm:flex-row">
                       <Select value={pendingCoOwner} onValueChange={setPendingCoOwner}>
                         <SelectTrigger className="text-xs">
