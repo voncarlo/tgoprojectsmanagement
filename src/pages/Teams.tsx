@@ -12,6 +12,7 @@ import { useState } from "react";
 import { PageHeader } from "@/components/portal/PageHeader";
 import { TeamIcon } from "@/components/portal/TeamIcon";
 import { useData } from "@/store/DataContext";
+import { getProjectMembers } from "@/lib/project-access";
 
 const Teams = () => {
   const { userList, setUserList, visibleTeams, isAdmin } = useAuth();
@@ -177,12 +178,12 @@ const Teams = () => {
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div>
                       <div className="font-medium text-sm">{p.name}</div>
-                      <div className="text-xs text-muted-foreground">{p.owner} · {p.start} → {p.end}</div>
+                      <div className="text-xs text-muted-foreground">{p.owner} · {getProjectMembers(p).length} members</div>
                     </div>
                     <Badge className={projectStatusColor[p.status]} variant="outline">{p.status}</Badge>
                   </div>
                   <div className="flex items-center justify-between text-xs mb-1.5">
-                    <span className="text-muted-foreground line-clamp-1">{p.description}</span>
+                    <span className="text-muted-foreground">Summary view</span>
                     <span className="font-semibold ml-2">{p.progress}%</span>
                   </div>
                   <Progress value={p.progress} className="h-1.5" />

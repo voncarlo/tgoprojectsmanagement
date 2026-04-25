@@ -16,7 +16,8 @@ import { useData } from "@/store/DataContext";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { toast } from "sonner";
 
-const EVENT_TYPES: CalendarEventType[] = ["PTO", "Call-out", "Meeting", "Event", "Deadline"];
+const EVENT_TYPES: CalendarEventType[] = ["PTO", "Call-out", "Meeting", "Event", "Deadline", "Birthday", "Anniversary", "Training", "Announcement"];
+type CalendarScope = "company" | "workspace";
 
 const TYPE_TONE: Record<CalendarEvent["type"], string> = {
   PTO: "bg-warning/10 text-warning border-warning/20",
@@ -24,6 +25,10 @@ const TYPE_TONE: Record<CalendarEvent["type"], string> = {
   Meeting: "bg-info/10 text-info border-info/20",
   Event: "bg-primary/10 text-primary border-primary/20",
   Deadline: "bg-destructive/10 text-destructive border-destructive/20",
+  Birthday: "bg-primary/10 text-primary border-primary/20",
+  Anniversary: "bg-warning/10 text-warning border-warning/20",
+  Training: "bg-info/10 text-info border-info/20",
+  Announcement: "bg-primary/10 text-primary border-primary/20",
 };
 
 const TYPE_DOT: Record<CalendarEvent["type"], string> = {
@@ -32,17 +37,22 @@ const TYPE_DOT: Record<CalendarEvent["type"], string> = {
   Meeting: "bg-info",
   Event: "bg-primary",
   Deadline: "bg-destructive",
+  Birthday: "bg-primary",
+  Anniversary: "bg-warning",
+  Training: "bg-info",
+  Announcement: "bg-primary",
 };
 
 const startOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1);
 const daysInMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
 
 const Calendar = () => {
-  const { visibleTeams, currentUser, isManager, isAdmin, isSuperAdmin } = useAuth();
+  const { visibleTeams, currentUser, isManager, isAdmin, isSuperAdmin, activeWorkspace } = useAuth();
   const isMobile = useIsMobile();
   const data = useData();
   const {
     calendarEvents,
+    allCalendarEvents,
     approvals: approvalItems,
     addCalendarEvent: createCalendarEvent,
     removeCalendarEvent: deleteCalendarEvent,
@@ -51,6 +61,7 @@ const Calendar = () => {
   const [cursor, setCursor] = useState(new Date());
   const [view, setView] = useState<"month" | "week" | "agenda">("month");
   const [filterType, setFilterType] = useState<CalendarEvent["type"] | "all">("all");
+  const [scope, setScope] = useState<CalendarScope>("workspace");
   const [open, setOpen] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [title, setTitle] = useState("");
@@ -58,14 +69,21 @@ const Calendar = () => {
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [teamId, setTeamId] = useState<string>("none");
 
-  const events = useMemo(
-    () => calendarEvents.filter((event) => (!event.team || visibleTeams.includes(event.team)) && (filterType === "all" || event.type === filterType)),
+  const companyEvents = useMemo(
+    () => allCalendarEvents.filter((event) => !event.team && (filterType === "all" || event.type === filterType)),
+    [allCalendarEvents, filterType]
+  );
+
+  const workspaceEvents = useMemo(
+    () => calendarEvents.filter((event) => event.team && visibleTeams.includes(event.team) && (filterType === "all" || event.type === filterType)),
     [calendarEvents, filterType, visibleTeams]
   );
 
+  const events = scope === "company" ? companyEvents : workspaceEvents;
+
   const pendingPtoRequests = useMemo(
     () =>
-      approvalItems.filter(
+          approvalItems.filter(
         (approval) =>
           approval.type === "Leave" &&
           (approval.status === "Pending" || approval.status === "Under Review") &&
@@ -169,6 +187,21 @@ const Calendar = () => {
           </div>
 
           <div className="flex w-full items-center gap-1 rounded-lg bg-muted/50 p-1 sm:w-auto">
+            {([
+              { key: "workspace", label: activeWorkspace?.shortName ? `${activeWorkspace.shortName} Calendar` : "Team Calendar" },
+              { key: "company", label: "Company Calendar" },
+            ] as const).map((option) => (
+              <button
+                key={option.key}
+                onClick={() => setScope(option.key)}
+                className={cn("h-7 flex-1 rounded-md px-3 text-xs font-medium transition-smooth sm:flex-none", scope === option.key ? "bg-background text-foreground shadow-soft" : "text-muted-foreground hover:text-foreground")}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex w-full items-center gap-1 rounded-lg bg-muted/50 p-1 sm:w-auto">
             {(["month", "week", "agenda"] as const).map((nextView) => (
               <button
                 key={nextView}
@@ -245,7 +278,7 @@ const Calendar = () => {
                     <p className="text-sm font-medium">{event.title}</p>
                     <div className="flex items-center gap-3 text-[11px] text-muted-foreground mt-0.5 flex-wrap">
                       <span className="flex items-center gap-1"><CalendarDays className="h-3 w-3" /> {event.date}</span>
-                      {team && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" /> {team.name}</span>}
+                  {team ? <span className="flex items-center gap-1"><MapPin className="h-3 w-3" /> {team.name}</span> : <span className="flex items-center gap-1"><MapPin className="h-3 w-3" /> Company-wide</span>}
                       <span className="flex items-center gap-1"><User className="h-3 w-3" /> {event.createdByName}</span>
                       {event.attendees && <span className="flex items-center gap-1"><Users className="h-3 w-3" /> {event.attendees.length}</span>}
                     </div>
@@ -328,7 +361,7 @@ const Calendar = () => {
                 <div className="text-sm space-y-2">
                   <p className="flex items-center gap-2 text-muted-foreground"><User className="h-4 w-4" /> Posted by <span className="text-foreground font-medium">{selectedEvent.createdByName}</span></p>
                   <p className="flex items-center gap-2 text-muted-foreground"><CalendarDays className="h-4 w-4" /> {selectedEvent.date}</p>
-                  {selectedEvent.team && <p className="flex items-center gap-2 text-muted-foreground"><MapPin className="h-4 w-4" /> {teams.find((team) => team.id === selectedEvent.team)?.name}</p>}
+                  <p className="flex items-center gap-2 text-muted-foreground"><MapPin className="h-4 w-4" /> {selectedEvent.team ? teams.find((team) => team.id === selectedEvent.team)?.name : "Company-wide"}</p>
                 </div>
                 {canDeleteEvent && (
                   <Button

@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useData } from "@/store/DataContext";
 import { useAuth } from "@/auth/AuthContext";
+import { canFullyAccessProject } from "@/lib/project-access";
 
 interface Props {
   open: boolean;
@@ -38,8 +39,8 @@ const navItems = [
 
 export const CommandPalette = ({ open, onOpenChange, onQuickAdd }: Props) => {
   const navigate = useNavigate();
-  const { tasks, projects } = useData();
-  const { canAccess, can, isAdmin } = useAuth();
+  const { tasks, allProjects } = useData();
+  const { canAccess, can, isAdmin, currentUser, isManager } = useAuth();
   const [_, setTick] = useState(0);
 
   // Force command list to refresh when opening
@@ -103,12 +104,14 @@ export const CommandPalette = ({ open, onOpenChange, onQuickAdd }: Props) => {
           </>
         )}
 
-        {projects.length > 0 && (
+        {allProjects.length > 0 && (
           <CommandGroup heading="Projects">
-            {projects.slice(0, 5).map((p) => (
+            {allProjects.slice(0, 5).map((p) => (
               <CommandItem key={p.id} onSelect={() => go("/projects")}>
                 <FolderKanban className="h-4 w-4" /> {p.name}
-                <span className="ml-auto text-[10px] text-muted-foreground">{p.status}</span>
+                <span className="ml-auto text-[10px] text-muted-foreground">
+                  {canFullyAccessProject(p, currentUser, isManager) ? p.status : "Limited"}
+                </span>
               </CommandItem>
             ))}
           </CommandGroup>

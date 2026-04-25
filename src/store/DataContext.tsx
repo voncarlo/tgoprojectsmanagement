@@ -104,7 +104,9 @@ interface PersistedDataState {
 
 interface DataCtx {
   tasks: Task[];
+  allTasks: Task[];
   projects: Project[];
+  allProjects: Project[];
   notifications: Notification[];
   unreadCount: number;
   unreadChatCount: number;
@@ -113,6 +115,7 @@ interface DataCtx {
   automations: AutomationRule[];
   auditLog: AuditEntry[];
   calendarEvents: CalendarEvent[];
+  allCalendarEvents: CalendarEvent[];
   recycleBin: RecycleBinItem[];
   chats: ChatMessage[];
   personalNotes: PersonalNote[];
@@ -1371,7 +1374,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       if (!recipient) return;
       const message: ChatMessage = {
         id: id("msg"),
-        workspaceId: activeWorkspace?.id ?? currentUser.team,
+        workspaceId: "direct-message",
         senderId: currentUser.id,
         senderName: currentUser.name,
         recipientId: recipient.id,
@@ -1391,7 +1394,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         recipientUserId: recipient.id,
       });
     },
-    [activeWorkspace?.id, auth.userList, currentUser.id, currentUser.name, currentUser.team, pushNotification]
+    [auth.userList, currentUser.id, currentUser.name, pushNotification]
   );
 
   const updateChatMessage: DataCtx["updateChatMessage"] = useCallback(
@@ -1466,10 +1469,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const filteredAuditLog = useMemo(() => auditLog.filter((entry) => isTeamVisible(entry.team)), [auditLog, visibleTeams, activeWorkspace?.isCompanyWide]);
   const filteredCalendarEvents = useMemo(() => calendarEvents.filter((event) => isTeamVisible(event.team)), [calendarEvents, visibleTeams, activeWorkspace?.isCompanyWide]);
   const filteredRecycleBin = useMemo(() => recycleBin.filter((item) => isTeamVisible(item.team)), [recycleBin, visibleTeams, activeWorkspace?.isCompanyWide]);
-  const filteredChats = useMemo(
-    () => chats.filter((entry) => entry.workspaceId === (activeWorkspace?.id ?? currentUser.team)),
-    [activeWorkspace?.id, chats, currentUser.team]
-  );
+  const filteredChats = chats;
 
   const unreadChatCount = useMemo(
     () =>
@@ -1485,7 +1485,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const value = useMemo<DataCtx>(
     () => ({
       tasks: filteredTasks,
+      allTasks: tasks,
       projects: filteredProjects,
+      allProjects: projects,
       notifications: notificationsForUser,
       unreadCount: notificationsForUser.filter((notification) => !notification.read).length,
       unreadChatCount,
@@ -1494,6 +1496,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       automations,
       auditLog: filteredAuditLog,
       calendarEvents: filteredCalendarEvents,
+      allCalendarEvents: calendarEvents,
       recycleBin: filteredRecycleBin,
       chats: filteredChats,
       personalNotes,
@@ -1534,7 +1537,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     }),
     [
       filteredTasks,
+      tasks,
       filteredProjects,
+      projects,
       notificationsForUser,
       unreadChatCount,
       filteredApprovals,
@@ -1542,6 +1547,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       automations,
       filteredAuditLog,
       filteredCalendarEvents,
+      calendarEvents,
       filteredRecycleBin,
       filteredChats,
       personalNotes,

@@ -18,6 +18,7 @@ import { useAuth } from "@/auth/AuthContext";
 import { useData } from "@/store/DataContext";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { canFullyAccessProject, getProjectMembers } from "@/lib/project-access";
 
 const PROJECT_STATUSES: ProjectStatus[] = ["Planning", "Active", "At Risk", "Delayed", "On Hold", "Waiting Review", "Completed"];
 
@@ -47,7 +48,7 @@ const sortProjectSubtasks = (subtasks: Subtask[]) => [...subtasks].sort((left, r
 
 const Projects = () => {
   const { visibleTeams, currentUser, isManager, can, userList } = useAuth();
-  const { projects, removeProject, updateProject, decideProjectApproval } = useData();
+  const { allProjects, removeProject, updateProject, decideProjectApproval } = useData();
   const teamsVisible = teams.filter((team) => visibleTeams.includes(team.id));
   const [filter, setFilter] = useState<string>("all");
   const [open, setOpen] = useState(false);
@@ -56,7 +57,7 @@ const Projects = () => {
   const [approvalComment, setApprovalComment] = useState("");
   const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
   const [pendingCoOwner, setPendingCoOwner] = useState("");
-  const list = projects.filter((project) => visibleTeams.includes(project.team) && (filter === "all" || project.team === filter));
+  const list = allProjects.filter((project) => filter === "all" || project.team === filter);
   const canDeleteProjects = can("project.delete");
 
   const openProject = (project: Project) => {
@@ -145,8 +146,10 @@ const Projects = () => {
         {list.map((project) => {
           const team = teams.find((entry) => entry.id === project.team)!;
           const canManageWork = canManageProjectWork(project, currentUser.name, isManager);
-          const subtasks = sortProjectSubtasks(project.subtasks ?? []);
-          const memberCount = project.coOwners?.length ?? 0;
+          const canOpenFullProject = canFullyAccessProject(project, currentUser, isManager);
+          const members = getProjectMembers(project);
+          const memberCount = members.length;
+          const isOutsideWorkspace = !visibleTeams.includes(project.team);
 
           return (
             <Card key={project.id} className="p-5 hover:shadow-elegant transition-smooth gradient-card cursor-pointer" onClick={() => openProject(project)}>
@@ -156,6 +159,9 @@ const Projects = () => {
                   {team.name}
                 </Badge>
                 <div className="flex items-center gap-2">
+                  {isOutsideWorkspace && (
+                    <Badge variant="outline" className="text-[10px]">Limited</Badge>
+                  )}
                   <Badge variant="outline" className={cn("text-[10px]", projectStatusColor[project.status])}>{project.status}</Badge>
                   {canDeleteProjects && (
                     <Button
@@ -176,7 +182,9 @@ const Projects = () => {
                 </div>
               </div>
               <h3 className="font-semibold text-base mb-1">{project.name}</h3>
-              <p className="text-xs text-muted-foreground mb-4 line-clamp-2">{project.description}</p>
+              <p className="text-xs text-muted-foreground mb-4 line-clamp-2">
+                {canOpenFullProject ? project.description : "Limited project summary available."}
+              </p>
 
               <div className="space-y-2 mb-4">
                 <div className="flex items-center justify-between text-xs">
@@ -186,42 +194,18 @@ const Projects = () => {
                 <Progress value={project.progress} className="h-2" />
               </div>
 
-              <div className="mb-4 max-h-80 space-y-1.5 overflow-y-auto pr-1">
-                {subtasks.length > 0 ? (
-                  subtasks.map((subtask) => (
-                    <button
-                      type="button"
-                      key={subtask.id}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        if (!canManageWork) return;
-                        const nextSubtasks = sortProjectSubtasks(subtasks.map((item) =>
-                          item.id === subtask.id ? { ...item, done: !item.done } : item
-                        ));
-                        const canChangeStatus = project.owner === currentUser.name;
-                        const nextStatus = canChangeStatus ? getNextProjectStatus({ ...project, subtasks: nextSubtasks }) : project.status;
-                        updateProject(project.id, {
-                          subtasks: nextSubtasks,
-                          progress: getProjectProgress({ ...project, subtasks: nextSubtasks }),
-                          ...(nextStatus !== project.status ? { status: nextStatus } : {}),
-                        });
-                      }}
-                      className={cn(
-                        "flex w-full items-center gap-2 text-xs rounded-md p-1 -mx-1 transition-smooth text-left",
-                        canManageWork ? "hover:bg-muted/50" : "cursor-default"
-                      )}
-                    >
-                      {subtask.done
-                        ? <CheckCircle2 className="h-3.5 w-3.5 text-success shrink-0" />
-                        : <Circle className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
-                      <span className={cn(subtask.done && "text-muted-foreground line-through")}>{subtask.title}</span>
-                    </button>
-                  ))
-                ) : (
-                  <div className="rounded-lg border border-dashed border-border px-3 py-3 text-xs text-muted-foreground">
-                    No subtasks yet.
-                  </div>
-                )}
+              <div className="mb-4 rounded-lg border border-border/60 bg-muted/20 p-3">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Team lead</span>
+                  <span className="font-medium">{project.owner}</span>
+                </div>
+                <div className="mt-2 flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Members</span>
+                  <span className="font-medium">{memberCount}</span>
+                </div>
+                <div className="mt-2 text-xs text-muted-foreground">
+                  {canOpenFullProject ? "Open to view tasks, members, approvals, and project details." : "Limited preview only. Open to view safe summary details."}
+                </div>
               </div>
 
               <div className="flex flex-col gap-2 border-t border-border pt-3 sm:flex-row sm:items-center sm:justify-between">
@@ -249,6 +233,8 @@ const Projects = () => {
             const isProjectCoOwner = (selectedProject.coOwners ?? []).includes(currentUser.name);
             const canManageWork = isProjectOwner || isProjectCoOwner;
             const canEditSubtasks = canManageProjectWork(selectedProject, currentUser.name, isManager);
+            const canOpenFullProject = canFullyAccessProject(selectedProject, currentUser, isManager);
+            const members = getProjectMembers(selectedProject);
             const canDecide = isManager;
             const showApprovalActions = canDecide && selectedProject.approvalStatus === "Pending Approval";
             const coOwnerCandidates = userList.filter((user) =>
@@ -271,7 +257,7 @@ const Projects = () => {
                     )}
                   </div>
                   <SheetTitle className="text-lg leading-tight">{selectedProject.name}</SheetTitle>
-                  <SheetDescription>{selectedProject.description}</SheetDescription>
+                  <SheetDescription>{canOpenFullProject ? selectedProject.description : "Limited project preview"}</SheetDescription>
                 </SheetHeader>
 
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -285,8 +271,23 @@ const Projects = () => {
                   <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-1.5">Access</p>
                     <p className="text-xs text-muted-foreground">
-                      {isProjectOwner ? "You can manage status, timeline, and subtasks." : canManageWork ? "You can manage timeline and subtasks as a member." : "View-only access."}
+                      {canOpenFullProject
+                        ? isProjectOwner
+                          ? "You can manage status, timeline, and subtasks."
+                          : canManageWork
+                            ? "You can manage timeline and subtasks as a member."
+                            : "You can fully view this project."
+                        : "You can only view the project summary because you are not assigned to this project."}
                     </p>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-1.5">Members</p>
+                  <div className="flex flex-wrap gap-2">
+                    {members.map((member) => (
+                      <Badge key={member} variant="outline">{member}</Badge>
+                    ))}
                   </div>
                 </div>
 
@@ -298,6 +299,14 @@ const Projects = () => {
                   <Progress value={selectedProject.progress} className="h-2" />
                 </div>
 
+                {!canOpenFullProject && (
+                  <div className="rounded-xl border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
+                    Detailed project content is restricted. Only Team Leads, assigned members, Managers, Admins, and Super Admins can view subtasks, files, approval history, and internal project details.
+                  </div>
+                )}
+
+                {canOpenFullProject && (
+                  <>
                 <div className="rounded-lg border border-border/60 bg-muted/20 p-3 space-y-3">
                   <div className="flex items-center justify-between">
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Timeline</p>
@@ -565,6 +574,8 @@ const Projects = () => {
                     )}
                   </div>
                 </div>
+                  </>
+                )}
               </div>
             );
           })()}

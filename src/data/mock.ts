@@ -67,7 +67,7 @@ export type ProjectStatus =
 export type ProjectHealth = "Healthy" | "At Risk" | "Delayed" | "Blocked";
 export type ApprovalType = "Task" | "Project" | "Leave" | "Budget" | "Change" | "Report";
 export type ApprovalStatus = "Pending" | "Under Review" | "Approved" | "Rejected" | "Returned";
-export type CalendarEventType = "PTO" | "Call-out" | "Meeting" | "Event" | "Deadline";
+export type CalendarEventType = "PTO" | "Call-out" | "Meeting" | "Event" | "Deadline" | "Birthday" | "Anniversary" | "Training" | "Announcement";
 
 export interface Team {
   id: TeamId;
@@ -423,6 +423,10 @@ export const calendarEvents: CalendarEvent[] = [
   { id: "ev7", title: "Portal Rollout pilot", type: "Event", date: "2025-05-02", team: "projects", createdById: "u1", createdByName: "Von Carlo Asinas" },
   { id: "ev8", title: "CRM renewal cutoff", type: "Deadline", date: "2025-04-29", team: "sales", createdById: "u1", createdByName: "Von Carlo Asinas" },
   { id: "ev9", title: "Admin policy review", type: "Meeting", date: "2025-04-30", team: "businessAdmin", createdById: "u1", createdByName: "Von Carlo Asinas" },
+  { id: "ev10", title: "April company town hall", type: "Announcement", date: "2025-04-26", createdById: "u1", createdByName: "Von Carlo Asinas" },
+  { id: "ev11", title: "Payroll compliance training", type: "Training", date: "2025-05-01", createdById: "u1", createdByName: "Von Carlo Asinas" },
+  { id: "ev12", title: "Ryan Lopez birthday", type: "Birthday", date: "2025-05-03", createdById: "u1", createdByName: "Von Carlo Asinas" },
+  { id: "ev13", title: "TGO founding anniversary", type: "Anniversary", date: "2025-05-08", createdById: "u1", createdByName: "Von Carlo Asinas" },
 ];
 
 // AI insights for executive dashboard
