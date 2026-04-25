@@ -137,7 +137,12 @@ export const Topbar = () => {
           </Button>
 
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+            <DropdownMenuTrigger
+              asChild
+              onClick={() => {
+                if (unreadCount > 0) markAllRead();
+              }}
+            >
               <Button variant="ghost" size="icon" className="relative">
                 <Bell className="h-[18px] w-[18px]" />
                 {unreadCount > 0 && (

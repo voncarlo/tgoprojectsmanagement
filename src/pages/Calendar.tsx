@@ -81,6 +81,10 @@ const Calendar = () => {
   const [eventType, setEventType] = useState<CalendarEvent["type"]>("Meeting");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [teamId, setTeamId] = useState<string>("none");
+  const calendarScopeOptions = useMemo(
+    () => [{ key: "company", label: "Company Calendar" }, ...departmentCalendarOptions],
+    [departmentCalendarOptions]
+  );
 
   const companyEvents = useMemo(
     () => allCalendarEvents.filter((event) => !event.team && (filterType === "all" || event.type === filterType)),
@@ -208,41 +212,45 @@ const Calendar = () => {
             <Button variant="outline" size="sm" className="ml-2 h-8" onClick={() => setCursor(new Date())}>Today</Button>
           </div>
 
-          <div className="flex w-full items-center gap-1 rounded-lg bg-muted/50 p-1 sm:w-auto">
-            {[{ key: "company", label: "Company Calendar" }, ...departmentCalendarOptions].map((option) => (
-              <button
-                key={option.key}
-                onClick={() => setScope(option.key)}
-                className={cn("h-7 flex-1 rounded-md px-3 text-xs font-medium transition-smooth sm:flex-none", scope === option.key ? "bg-background text-foreground shadow-soft" : "text-muted-foreground hover:text-foreground")}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+          <div className="grid w-full gap-2 sm:ml-auto sm:w-auto sm:grid-cols-3">
+            <Select value={scope} onValueChange={(value) => setScope(value as CalendarScope)}>
+              <SelectTrigger className="h-9 min-w-[220px] text-xs">
+                <SelectValue placeholder="Select calendar" />
+              </SelectTrigger>
+              <SelectContent>
+                {calendarScopeOptions.map((option) => (
+                  <SelectItem key={option.key} value={option.key}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-          <div className="flex w-full items-center gap-1 rounded-lg bg-muted/50 p-1 sm:w-auto">
-            {(["month", "week", "agenda"] as const).map((nextView) => (
-              <button
-                key={nextView}
-                onClick={() => setView(nextView)}
-                className={cn("h-7 flex-1 rounded-md px-3 text-xs font-medium capitalize transition-smooth sm:flex-none", view === nextView ? "bg-background text-foreground shadow-soft" : "text-muted-foreground hover:text-foreground")}
-              >
-                {nextView}
-              </button>
-            ))}
-          </div>
+            <Select value={view} onValueChange={(value) => setView(value as typeof view)}>
+              <SelectTrigger className="h-9 min-w-[120px] text-xs">
+                <SelectValue placeholder="Select view" />
+              </SelectTrigger>
+              <SelectContent>
+                {(["month", "week", "agenda"] as const).map((nextView) => (
+                  <SelectItem key={nextView} value={nextView}>
+                    {nextView.charAt(0).toUpperCase() + nextView.slice(1)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-          <div className="ml-auto flex items-center gap-1.5 flex-wrap">
-            {(["all", ...EVENT_TYPES] as const).map((type) => (
-              <button
-                key={type}
-                onClick={() => setFilterType(type as typeof filterType)}
-                className={cn("h-7 px-2.5 rounded-full border text-xs font-medium transition-smooth flex items-center gap-1.5", filterType === type ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-muted")}
-              >
-                {type !== "all" && <span className={cn("h-1.5 w-1.5 rounded-full", TYPE_DOT[type as CalendarEvent["type"]])} />}
-                {type === "all" ? "All" : type}
-              </button>
-            ))}
+            <Select value={filterType} onValueChange={(value) => setFilterType(value as CalendarEvent["type"] | "all")}>
+              <SelectTrigger className="h-9 min-w-[150px] text-xs">
+                <SelectValue placeholder="Filter type" />
+              </SelectTrigger>
+              <SelectContent>
+                {(["all", ...EVENT_TYPES] as const).map((type) => (
+                  <SelectItem key={type} value={type}>
+                    {type === "all" ? "All event types" : type}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
 

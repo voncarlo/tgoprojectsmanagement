@@ -155,12 +155,15 @@ interface PersistedDataState {
   tasks: Task[];
   deletedTaskIds: string[];
   projects: Project[];
+  deletedProjectIds: string[];
   notifications: Notification[];
   approvals: Approval[];
   documents: DocumentFile[];
+  deletedDocumentIds: string[];
   automations: AutomationRule[];
   auditLog: AuditEntry[];
   calendarEvents: CalendarEvent[];
+  deletedCalendarEventIds: string[];
   recycleBin: RecycleBinItem[];
   chats: ChatMessage[];
   taskComments: TaskComment[];
@@ -276,18 +279,28 @@ const mergeRecordCollections = <T extends { id: string }>(remoteItems: T[] = [],
 const mergePersistedState = (remoteState: PersistedDataState | null, localState: PersistedDataState): PersistedDataState => {
   if (!remoteState) return localState;
   const deletedTaskIds = [...new Set([...(remoteState.deletedTaskIds ?? []), ...(localState.deletedTaskIds ?? [])])];
+  const deletedProjectIds = [...new Set([...(remoteState.deletedProjectIds ?? []), ...(localState.deletedProjectIds ?? [])])];
+  const deletedDocumentIds = [...new Set([...(remoteState.deletedDocumentIds ?? []), ...(localState.deletedDocumentIds ?? [])])];
+  const deletedCalendarEventIds = [...new Set([...(remoteState.deletedCalendarEventIds ?? []), ...(localState.deletedCalendarEventIds ?? [])])];
   return {
     tasks: mergeRecordCollections(remoteState.tasks, localState.tasks).filter((task) => !deletedTaskIds.includes(task.id)),
     deletedTaskIds,
-    projects: mergeRecordCollections(remoteState.projects, localState.projects),
+    projects: mergeRecordCollections(remoteState.projects, localState.projects).filter((project) => !deletedProjectIds.includes(project.id)),
+    deletedProjectIds,
     notifications: mergeRecordCollections(remoteState.notifications, localState.notifications),
     approvals: mergeRecordCollections(remoteState.approvals, localState.approvals).filter(
-      (approval) => !approval.taskId || !deletedTaskIds.includes(approval.taskId)
+      (approval) =>
+        (!approval.taskId || !deletedTaskIds.includes(approval.taskId)) &&
+        (!approval.projectId || !deletedProjectIds.includes(approval.projectId))
     ),
-    documents: mergeRecordCollections(remoteState.documents, localState.documents),
+    documents: mergeRecordCollections(remoteState.documents, localState.documents).filter((document) => !deletedDocumentIds.includes(document.id)),
+    deletedDocumentIds,
     automations: mergeRecordCollections(remoteState.automations, localState.automations),
     auditLog: mergeRecordCollections(remoteState.auditLog, localState.auditLog),
-    calendarEvents: mergeRecordCollections(remoteState.calendarEvents, localState.calendarEvents),
+    calendarEvents: mergeRecordCollections(remoteState.calendarEvents, localState.calendarEvents).filter(
+      (event) => !deletedCalendarEventIds.includes(event.id)
+    ),
+    deletedCalendarEventIds,
     recycleBin: mergeRecordCollections(remoteState.recycleBin, localState.recycleBin),
     chats: mergeRecordCollections(remoteState.chats, localState.chats),
     taskComments: mergeRecordCollections(remoteState.taskComments, localState.taskComments).filter(
@@ -302,12 +315,15 @@ const defaultState: PersistedDataState = {
   tasks: seedTasks,
   deletedTaskIds: [],
   projects: seedProjects,
+  deletedProjectIds: [],
   notifications: seedActivity.map((item) => ({ ...item, read: false })),
   approvals: seedApprovals,
   documents: seedDocuments,
+  deletedDocumentIds: [],
   automations: seedAutomations,
   auditLog: seedAuditLog,
   calendarEvents: seedCalendarEvents,
+  deletedCalendarEventIds: [],
   recycleBin: [],
   chats: [],
   taskComments: [],
@@ -322,18 +338,28 @@ const loadState = (): PersistedDataState => {
     if (!raw) return defaultState;
     const parsed = JSON.parse(raw) as Partial<PersistedDataState>;
     const deletedTaskIds = parsed.deletedTaskIds ?? defaultState.deletedTaskIds;
+    const deletedProjectIds = parsed.deletedProjectIds ?? defaultState.deletedProjectIds;
+    const deletedDocumentIds = parsed.deletedDocumentIds ?? defaultState.deletedDocumentIds;
+    const deletedCalendarEventIds = parsed.deletedCalendarEventIds ?? defaultState.deletedCalendarEventIds;
     return {
       tasks: (parsed.tasks?.length ? parsed.tasks : defaultState.tasks).filter((task) => !deletedTaskIds.includes(task.id)),
       deletedTaskIds,
-      projects: parsed.projects?.length ? parsed.projects : defaultState.projects,
+      projects: (parsed.projects?.length ? parsed.projects : defaultState.projects).filter((project) => !deletedProjectIds.includes(project.id)),
+      deletedProjectIds,
       notifications: parsed.notifications?.length ? parsed.notifications : defaultState.notifications,
       approvals: (parsed.approvals?.length ? parsed.approvals : defaultState.approvals).filter(
-        (approval) => !approval.taskId || !deletedTaskIds.includes(approval.taskId)
+        (approval) =>
+          (!approval.taskId || !deletedTaskIds.includes(approval.taskId)) &&
+          (!approval.projectId || !deletedProjectIds.includes(approval.projectId))
       ),
-      documents: parsed.documents?.length ? parsed.documents : defaultState.documents,
+      documents: (parsed.documents?.length ? parsed.documents : defaultState.documents).filter((document) => !deletedDocumentIds.includes(document.id)),
+      deletedDocumentIds,
       automations: parsed.automations?.length ? parsed.automations : defaultState.automations,
       auditLog: parsed.auditLog?.length ? parsed.auditLog : defaultState.auditLog,
-      calendarEvents: parsed.calendarEvents?.length ? parsed.calendarEvents : defaultState.calendarEvents,
+      calendarEvents: (parsed.calendarEvents?.length ? parsed.calendarEvents : defaultState.calendarEvents).filter(
+        (event) => !deletedCalendarEventIds.includes(event.id)
+      ),
+      deletedCalendarEventIds,
       recycleBin: parsed.recycleBin ?? defaultState.recycleBin,
       chats: parsed.chats ?? defaultState.chats,
       taskComments: (parsed.taskComments ?? defaultState.taskComments).filter((comment) => !deletedTaskIds.includes(comment.taskId)),
@@ -506,12 +532,15 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [tasks, setTasks] = useState<Task[]>(initialState.tasks);
   const [deletedTaskIds, setDeletedTaskIds] = useState<string[]>(initialState.deletedTaskIds ?? []);
   const [projects, setProjects] = useState<Project[]>(initialState.projects);
+  const [deletedProjectIds, setDeletedProjectIds] = useState<string[]>(initialState.deletedProjectIds ?? []);
   const [notifications, setNotifications] = useState<Notification[]>(initialState.notifications);
   const [approvals, setApprovals] = useState<Approval[]>(initialState.approvals);
   const [documents, setDocuments] = useState<DocumentFile[]>(initialState.documents);
+  const [deletedDocumentIds, setDeletedDocumentIds] = useState<string[]>(initialState.deletedDocumentIds ?? []);
   const [automations, setAutomations] = useState<AutomationRule[]>(initialState.automations);
   const [auditLog, setAuditLog] = useState<AuditEntry[]>(initialState.auditLog);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>(initialState.calendarEvents);
+  const [deletedCalendarEventIds, setDeletedCalendarEventIds] = useState<string[]>(initialState.deletedCalendarEventIds ?? []);
   const [recycleBin, setRecycleBin] = useState<RecycleBinItem[]>(initialState.recycleBin);
   const [chats, setChats] = useState<ChatMessage[]>(initialState.chats);
   const [taskComments, setTaskComments] = useState<TaskComment[]>(initialState.taskComments);
@@ -523,32 +552,44 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       tasks,
       deletedTaskIds,
       projects,
+      deletedProjectIds,
       notifications,
       approvals,
       documents,
+      deletedDocumentIds,
       automations,
       auditLog,
       calendarEvents,
+      deletedCalendarEventIds,
       recycleBin,
       chats,
       taskComments,
       chatReadAtByUser,
       personalNotes,
     }),
-    [approvals, auditLog, automations, calendarEvents, chats, chatReadAtByUser, deletedTaskIds, documents, notifications, personalNotes, projects, recycleBin, taskComments, tasks]
+    [approvals, auditLog, automations, calendarEvents, chats, chatReadAtByUser, deletedCalendarEventIds, deletedDocumentIds, deletedProjectIds, deletedTaskIds, documents, notifications, personalNotes, projects, recycleBin, taskComments, tasks]
   );
   const applyRemoteState = useCallback((remoteState: PersistedDataState, revision = 0) => {
     skipNextServerSaveRef.current = true;
     latestServerRevisionRef.current = Math.max(latestServerRevisionRef.current, revision);
     setTasks((remoteState.tasks ?? defaultState.tasks).filter((task) => !(remoteState.deletedTaskIds ?? []).includes(task.id)));
     setDeletedTaskIds(remoteState.deletedTaskIds ?? []);
-    setProjects(remoteState.projects ?? defaultState.projects);
+    setProjects((remoteState.projects ?? defaultState.projects).filter((project) => !(remoteState.deletedProjectIds ?? []).includes(project.id)));
+    setDeletedProjectIds(remoteState.deletedProjectIds ?? []);
     setNotifications(remoteState.notifications ?? defaultState.notifications);
-    setApprovals((remoteState.approvals ?? defaultState.approvals).filter((approval) => !approval.taskId || !(remoteState.deletedTaskIds ?? []).includes(approval.taskId)));
-    setDocuments(remoteState.documents ?? defaultState.documents);
+    setApprovals(
+      (remoteState.approvals ?? defaultState.approvals).filter(
+        (approval) =>
+          (!approval.taskId || !(remoteState.deletedTaskIds ?? []).includes(approval.taskId)) &&
+          (!approval.projectId || !(remoteState.deletedProjectIds ?? []).includes(approval.projectId))
+      )
+    );
+    setDocuments((remoteState.documents ?? defaultState.documents).filter((document) => !(remoteState.deletedDocumentIds ?? []).includes(document.id)));
+    setDeletedDocumentIds(remoteState.deletedDocumentIds ?? []);
     setAutomations(remoteState.automations ?? defaultState.automations);
     setAuditLog(remoteState.auditLog ?? defaultState.auditLog);
-    setCalendarEvents(remoteState.calendarEvents ?? defaultState.calendarEvents);
+    setCalendarEvents((remoteState.calendarEvents ?? defaultState.calendarEvents).filter((event) => !(remoteState.deletedCalendarEventIds ?? []).includes(event.id)));
+    setDeletedCalendarEventIds(remoteState.deletedCalendarEventIds ?? []);
     setRecycleBin(remoteState.recycleBin ?? []);
     setChats(remoteState.chats ?? []);
     setTaskComments((remoteState.taskComments ?? []).filter((comment) => !(remoteState.deletedTaskIds ?? []).includes(comment.taskId)));
@@ -1315,6 +1356,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         approver: requiresApproval ? projectInput.approver ?? getApprovalSummaryForTeam(projectInput.team) : undefined,
         approvalHistory: [],
       };
+      setDeletedProjectIds((items) => items.filter((projectId) => projectId !== next.id));
       setProjects((items) => [next, ...items]);
       pushActivity({ user: currentUser.name, action: "created project", target: next.name, targetType: "project", targetId: next.id });
       notifyUsers(
@@ -1510,8 +1552,15 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const removeProject: DataCtx["removeProject"] = useCallback(
     (projectId) => {
       const existing = projects.find((project) => project.id === projectId);
+      if (!existing) {
+        console.error("[projects] delete failed: project not found", { projectId });
+        toast.error("We couldn't delete that project because it was no longer found.");
+        return;
+      }
+      console.debug("[projects] deleting project", { projectId, name: existing.name });
+      setDeletedProjectIds((items) => (items.includes(projectId) ? items : [projectId, ...items]));
       setProjects((items) => items.filter((project) => project.id !== projectId));
-      if (!existing) return;
+      setApprovals((items) => items.filter((approval) => approval.projectId !== projectId));
       addToRecycleBin({
         resourceId: existing.id,
         type: "project",
@@ -1792,6 +1841,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         updated: nowLabel(),
         version: doc.version ?? "v1",
       };
+      setDeletedDocumentIds((items) => items.filter((documentId) => documentId !== next.id));
       setDocuments((items) => [next, ...items]);
       appendAudit({
         user: currentUser.name,
@@ -1809,8 +1859,14 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const removeDocument: DataCtx["removeDocument"] = useCallback(
     (docId) => {
       const existing = documents.find((doc) => doc.id === docId);
+      if (!existing) {
+        console.error("[documents] delete failed: document not found", { docId });
+        toast.error("We couldn't delete that document because it was no longer found.");
+        return;
+      }
+      console.debug("[documents] deleting document", { docId, name: existing.name });
+      setDeletedDocumentIds((items) => (items.includes(docId) ? items : [docId, ...items]));
       setDocuments((items) => items.filter((doc) => doc.id !== docId));
-      if (!existing) return;
       addToRecycleBin({
         resourceId: existing.id,
         type: "document",
@@ -1845,6 +1901,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       }
 
       if (existing.type === "project") {
+        setDeletedProjectIds((items) => items.filter((projectId) => projectId !== existing.resourceId));
         setProjects((items) => {
           if (items.some((project) => project.id === existing.resourceId)) return items;
           return [existing.payload as Project, ...items];
@@ -1852,6 +1909,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       }
 
       if (existing.type === "document") {
+        setDeletedDocumentIds((items) => items.filter((documentId) => documentId !== existing.resourceId));
         setDocuments((items) => {
           if (items.some((doc) => doc.id === existing.resourceId)) return items;
           return [existing.payload as DocumentFile, ...items];
@@ -1911,6 +1969,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const addCalendarEvent: DataCtx["addCalendarEvent"] = useCallback(
     (event) => {
       const next: CalendarEvent = { ...event, id: id("ev") };
+      setDeletedCalendarEventIds((items) => items.filter((eventId) => eventId !== next.id));
       setCalendarEvents((items) => [next, ...items]);
       appendAudit({
         user: currentUser.name,
@@ -1937,14 +1996,23 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
   const removeCalendarEvent: DataCtx["removeCalendarEvent"] = useCallback(
     (eventId) => {
+      const existingEvent = calendarEvents.find((event) => event.id === eventId);
+      if (!existingEvent) {
+        console.error("[calendar] delete failed: event not found", { eventId });
+        toast.error("We couldn't delete that calendar entry because it was no longer found.");
+        return;
+      }
       let removedEvent: CalendarEvent | null = null;
+      setDeletedCalendarEventIds((items) => (items.includes(eventId) ? items : [eventId, ...items]));
       setCalendarEvents((items) =>
         items.filter((event) => {
           if (event.id === eventId) removedEvent = event;
           return event.id !== eventId;
         })
       );
-      if (!removedEvent) return;
+      if (!removedEvent) {
+        return;
+      }
       appendAudit({
         user: currentUser.name,
         action: "Deleted calendar event",
@@ -1954,7 +2022,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       });
       pushActivity({ user: currentUser.name, action: "deleted calendar event", target: removedEvent.title });
     },
-    [appendAudit, currentUser.name, currentUser.role, pushActivity]
+    [appendAudit, calendarEvents, currentUser.name, currentUser.role, pushActivity]
   );
 
   const requestCalendarPto: DataCtx["requestCalendarPto"] = useCallback(
