@@ -6,6 +6,7 @@ import {
   ShieldAlert, BarChart4, ChevronDown, Trash2, MessageSquare, NotebookPen,
 } from "lucide-react";
 import { Logo } from "@/components/portal/Logo";
+import { WorkspaceSwitcher } from "@/components/portal/WorkspaceSwitcher";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/auth/AuthContext";
 import type { ModuleKey } from "@/data/mock";
@@ -82,7 +83,7 @@ type SidebarInnerProps = {
 const SidebarInner = ({ collapsed, setCollapsed, onNavigate, hideCollapseToggle }: SidebarInnerProps) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { canAccess, can, isAdmin, signOut } = useAuth();
+  const { canAccess, can, isAdmin, signOut, activeWorkspace } = useAuth();
   const { unreadChatCount } = useData();
 
   const visibleSections = useMemo(
@@ -184,6 +185,20 @@ const SidebarInner = ({ collapsed, setCollapsed, onNavigate, hideCollapseToggle 
         <div className="flex h-16 items-center justify-between px-4 border-b border-sidebar-border/60">
           <Logo collapsed={collapsed} />
         </div>
+
+        {!collapsed && (
+          <div className="border-b border-sidebar-border/60 px-3 py-3">
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-sidebar-foreground/45">
+              Active Workspace
+            </p>
+            <WorkspaceSwitcher compact className="border-sidebar-border bg-sidebar-accent/30 text-sidebar-foreground hover:bg-sidebar-accent" />
+            {activeWorkspace && (
+              <p className="mt-2 text-[11px] leading-relaxed text-sidebar-foreground/60">
+                {activeWorkspace.isCompanyWide ? "Viewing company-wide data and updates." : `Scoped to ${activeWorkspace.shortName}.`}
+              </p>
+            )}
+          </div>
+        )}
 
         <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-1.5">
           {/* Dashboard — always top-level */}

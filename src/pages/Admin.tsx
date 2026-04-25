@@ -1,12 +1,17 @@
 import { Card } from "@/components/ui/card";
-import { Fragment } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
-  ShieldAlert, Users, HardDrive, Activity, Database, Server, Lock, Check, Minus, LogIn, LogOut,
+  ShieldAlert, Users, HardDrive, Activity, Database, Server, Lock, Check, Minus, LogIn, LogOut, Pencil, Plus, Trash2,
 } from "lucide-react";
 import { PageHeader } from "@/components/portal/PageHeader";
 import { StatTile } from "@/components/portal/StatTile";
@@ -16,11 +21,47 @@ import { RoleBadge } from "@/components/rbac/RoleBadge";
 import { AccessDenied } from "@/components/rbac/AccessDenied";
 import { cn } from "@/lib/utils";
 import { useData } from "@/store/DataContext";
+import { teams, type TeamId } from "@/data/mock";
+import type { Workspace } from "@/lib/workspaces";
+
+const emptyWorkspace = (): Workspace => ({
+  id: `workspace-${Math.random().toString(36).slice(2, 8)}`,
+  name: "",
+  shortName: "",
+  description: "",
+  kind: "custom",
+  color: "221 83% 53%",
+  teamIds: [],
+});
 
 const Admin = () => {
-  const { can, isSuperAdmin, sessionLogs, userList } = useAuth();
+  const { can, isSuperAdmin, sessionLogs, userList, workspaces, upsertWorkspace, deleteWorkspace } = useAuth();
   const { automations, documents, auditLog } = useData();
+  const [workspaceEditor, setWorkspaceEditor] = useState<Workspace | null>(null);
   if (!can("admin.access")) return <AccessDenied module="Admin Panel" />;
+
+  const workspaceMembers = useMemo(
+    () =>
+      Object.fromEntries(
+        workspaces.map((workspace) => [
+          workspace.id,
+          userList.filter((user) => (user.workspaceIds ?? []).includes(workspace.id)),
+        ])
+      ),
+    [userList, workspaces]
+  );
+
+  const saveWorkspace = () => {
+    if (!workspaceEditor) return;
+    if (!workspaceEditor.name.trim() || workspaceEditor.teamIds.length === 0) return;
+    upsertWorkspace({
+      ...workspaceEditor,
+      name: workspaceEditor.name.trim(),
+      shortName: workspaceEditor.shortName.trim() || workspaceEditor.name.trim(),
+      description: workspaceEditor.description.trim(),
+    });
+    setWorkspaceEditor(null);
+  };
 
   return (
     <div className="space-y-6">
@@ -103,6 +144,69 @@ const Admin = () => {
           </Card>
 
           <div className="grid gap-6 lg:grid-cols-2">
+            <Card className="p-6 lg:col-span-2">
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="font-semibold">Workspace management</h3>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Create and edit workspaces here. User assignment and company-wide access are managed from User Management.
+                  </p>
+                </div>
+                {can("workspace.manage") && (
+                  <Button className="gap-1.5" onClick={() => setWorkspaceEditor(emptyWorkspace())}>
+                    <Plus className="h-4 w-4" /> New workspace
+                  </Button>
+                )}
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                {workspaces.map((workspace) => (
+                  <div key={workspace.id} className="rounded-xl border border-border p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: `hsl(${workspace.color})` }} />
+                          <p className="font-medium">{workspace.name}</p>
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">{workspace.description}</p>
+                      </div>
+                      <Badge variant="outline" className="text-[10px]">
+                        {workspace.kind === "company" ? "Company-wide" : workspace.kind}
+                      </Badge>
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-1">
+                      {workspace.teamIds.map((teamId) => (
+                        <Badge key={teamId} variant="outline" className="text-[10px]">
+                          {teams.find((team) => team.id === teamId)?.name ?? teamId}
+                        </Badge>
+                      ))}
+                    </div>
+                    <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
+                      <span>{workspaceMembers[workspace.id]?.length ?? 0} assigned user(s)</span>
+                      <div className="flex items-center gap-2">
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setWorkspaceEditor(workspace)}>
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        {workspace.kind === "custom" && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive hover:text-destructive"
+                            onClick={() => {
+                              const confirmed = window.confirm(`Delete workspace "${workspace.name}"?`);
+                              if (!confirmed) return;
+                              deleteWorkspace(workspace.id);
+                            }}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+
             <Card className="p-6">
               <h3 className="font-semibold mb-1">Storage</h3>
               <p className="text-xs text-muted-foreground mb-4">240 GB of 500 GB used</p>
@@ -236,6 +340,65 @@ const Admin = () => {
           </TabsContent>
         )}
       </Tabs>
+
+      <Dialog open={!!workspaceEditor} onOpenChange={(open) => !open && setWorkspaceEditor(null)}>
+        <DialogContent className="max-w-2xl">
+          {workspaceEditor && (
+            <>
+              <DialogHeader>
+                <DialogTitle>{workspaces.some((workspace) => workspace.id === workspaceEditor.id) ? "Edit workspace" : "Create workspace"}</DialogTitle>
+                <DialogDescription>
+                  Department workspaces stay scoped to their assigned teams. Company-wide access should only be granted from User Management.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="grid gap-4 py-2 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Workspace name</Label>
+                  <Input value={workspaceEditor.name} onChange={(event) => setWorkspaceEditor({ ...workspaceEditor, name: event.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Short name</Label>
+                  <Input value={workspaceEditor.shortName} onChange={(event) => setWorkspaceEditor({ ...workspaceEditor, shortName: event.target.value })} />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label>Description</Label>
+                  <Textarea rows={3} value={workspaceEditor.description} onChange={(event) => setWorkspaceEditor({ ...workspaceEditor, description: event.target.value })} />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label>Departments included</Label>
+                  <div className="grid gap-2 rounded-lg border border-border p-3 sm:grid-cols-2">
+                    {teams.map((team) => {
+                      const checked = workspaceEditor.teamIds.includes(team.id);
+                      return (
+                        <label key={team.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={(value) => {
+                              const teamIds = value
+                                ? [...new Set([...workspaceEditor.teamIds, team.id])]
+                                : workspaceEditor.teamIds.filter((item) => item !== team.id);
+                              setWorkspaceEditor({ ...workspaceEditor, teamIds: teamIds as TeamId[] });
+                            }}
+                            disabled={workspaceEditor.kind === "company"}
+                          />
+                          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: `hsl(${team.color})` }} />
+                          {team.name}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setWorkspaceEditor(null)}>Cancel</Button>
+                <Button onClick={saveWorkspace}>Save workspace</Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

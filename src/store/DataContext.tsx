@@ -35,6 +35,7 @@ type RecycleBinType = "task" | "document" | "project";
 
 export interface ChatMessage {
   id: string;
+  workspaceId: string;
   senderId: string;
   senderName: string;
   recipientId: string;
@@ -250,6 +251,8 @@ const roleNeedsApproval = (role: string) => role === "Staff";
 export const DataProvider = ({ children }: { children: ReactNode }) => {
   const auth = useAuth();
   const currentUser = auth.currentUser;
+  const activeWorkspace = auth.activeWorkspace;
+  const visibleTeams = auth.visibleTeams;
   const canDirectTaskCreate = auth.can("task.create");
   const canDirectProjectCreate = auth.can("project.create");
   const initialState = loadState();
@@ -357,6 +360,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             action: "deadline reminder",
             target: `${task.title} is due ${deadlineLabel(task.due)}`,
             time: "Deadline reminder",
+            team: task.team,
             read: existing.get(`deadline-task-${task.id}`)?.read ?? false,
             kind: "deadline" as const,
           })),
@@ -368,6 +372,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             action: "project reminder",
             target: `${project.name} ends ${deadlineLabel(project.end)}`,
             time: "Deadline reminder",
+            team: project.team,
             read: existing.get(`deadline-project-${project.id}`)?.read ?? false,
             kind: "deadline" as const,
           })),
@@ -386,9 +391,19 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
   const pushActivity = useCallback(
     (activity: Omit<Activity, "id" | "time">) => {
-      setNotifications((items) => [{ ...activity, id: id("a"), time: nowLabel(), read: false, kind: "activity" }, ...items].slice(0, 30));
+      setNotifications((items) => [
+        {
+          ...activity,
+          team: activity.team ?? (activeWorkspace?.isCompanyWide ? undefined : visibleTeams[0] ?? currentUser.team),
+          id: id("a"),
+          time: nowLabel(),
+          read: false,
+          kind: "activity",
+        },
+        ...items,
+      ].slice(0, 30));
     },
-    []
+    [activeWorkspace?.isCompanyWide, currentUser.team, visibleTeams]
   );
 
   const pushNotification = useCallback(
@@ -396,6 +411,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       setNotifications((items) => [
         {
           ...activity,
+          team: activity.team ?? (activeWorkspace?.isCompanyWide ? undefined : visibleTeams[0] ?? currentUser.team),
           id: id("a"),
           time: nowLabel(),
           read: false,
@@ -404,7 +420,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         ...items,
       ].slice(0, 60));
     },
-    []
+    [activeWorkspace?.isCompanyWide, currentUser.team, visibleTeams]
   );
 
   const addToRecycleBin = useCallback(
@@ -1355,6 +1371,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       if (!recipient) return;
       const message: ChatMessage = {
         id: id("msg"),
+        workspaceId: activeWorkspace?.id ?? currentUser.team,
         senderId: currentUser.id,
         senderName: currentUser.name,
         recipientId: recipient.id,
@@ -1374,7 +1391,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         recipientUserId: recipient.id,
       });
     },
-    [auth.userList, currentUser.id, currentUser.name, pushNotification]
+    [activeWorkspace?.id, auth.userList, currentUser.id, currentUser.name, currentUser.team, pushNotification]
   );
 
   const updateChatMessage: DataCtx["updateChatMessage"] = useCallback(
@@ -1429,36 +1446,56 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     setPersonalNotes((items) => items.filter((note) => note.id !== noteId));
   }, []);
 
+  const isTeamVisible = (team?: TeamId) => {
+    if (!team) return Boolean(activeWorkspace?.isCompanyWide);
+    return visibleTeams.includes(team);
+  };
+
   const notificationsForUser =
     currentUser.notificationSettings?.enabled === false
       ? []
-      : notifications.filter((notification) => !notification.recipientUserId || notification.recipientUserId === currentUser.id);
+      : notifications.filter(
+          (notification) =>
+            (!notification.recipientUserId || notification.recipientUserId === currentUser.id) && isTeamVisible(notification.team)
+        );
+
+  const filteredTasks = useMemo(() => tasks.filter((task) => isTeamVisible(task.team)), [tasks, visibleTeams, activeWorkspace?.isCompanyWide]);
+  const filteredProjects = useMemo(() => projects.filter((project) => isTeamVisible(project.team)), [projects, visibleTeams, activeWorkspace?.isCompanyWide]);
+  const filteredApprovals = useMemo(() => approvals.filter((approval) => isTeamVisible(approval.team)), [approvals, visibleTeams, activeWorkspace?.isCompanyWide]);
+  const filteredDocuments = useMemo(() => documents.filter((document) => isTeamVisible(document.team)), [documents, visibleTeams, activeWorkspace?.isCompanyWide]);
+  const filteredAuditLog = useMemo(() => auditLog.filter((entry) => isTeamVisible(entry.team)), [auditLog, visibleTeams, activeWorkspace?.isCompanyWide]);
+  const filteredCalendarEvents = useMemo(() => calendarEvents.filter((event) => isTeamVisible(event.team)), [calendarEvents, visibleTeams, activeWorkspace?.isCompanyWide]);
+  const filteredRecycleBin = useMemo(() => recycleBin.filter((item) => isTeamVisible(item.team)), [recycleBin, visibleTeams, activeWorkspace?.isCompanyWide]);
+  const filteredChats = useMemo(
+    () => chats.filter((entry) => entry.workspaceId === (activeWorkspace?.id ?? currentUser.team)),
+    [activeWorkspace?.id, chats, currentUser.team]
+  );
 
   const unreadChatCount = useMemo(
     () =>
-      chats.filter((entry) => {
+      filteredChats.filter((entry) => {
         if (entry.recipientId !== currentUser.id || entry.senderId === currentUser.id) return false;
         const lastReadAt = chatReadAtByUser[currentUser.id];
         if (!lastReadAt) return true;
         return new Date(entry.createdAt).getTime() > new Date(lastReadAt).getTime();
       }).length,
-    [chatReadAtByUser, chats, currentUser.id]
+    [chatReadAtByUser, currentUser.id, filteredChats]
   );
 
   const value = useMemo<DataCtx>(
     () => ({
-      tasks,
-      projects,
+      tasks: filteredTasks,
+      projects: filteredProjects,
       notifications: notificationsForUser,
       unreadCount: notificationsForUser.filter((notification) => !notification.read).length,
       unreadChatCount,
-      approvals,
-      documents,
+      approvals: filteredApprovals,
+      documents: filteredDocuments,
       automations,
-      auditLog,
-      calendarEvents,
-      recycleBin,
-      chats,
+      auditLog: filteredAuditLog,
+      calendarEvents: filteredCalendarEvents,
+      recycleBin: filteredRecycleBin,
+      chats: filteredChats,
       personalNotes,
       addTask,
       updateTask,
@@ -1496,17 +1533,17 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       removePersonalNote,
     }),
     [
-      tasks,
-      projects,
+      filteredTasks,
+      filteredProjects,
       notificationsForUser,
       unreadChatCount,
-      approvals,
-      documents,
+      filteredApprovals,
+      filteredDocuments,
       automations,
-      auditLog,
-      calendarEvents,
-      recycleBin,
-      chats,
+      filteredAuditLog,
+      filteredCalendarEvents,
+      filteredRecycleBin,
+      filteredChats,
       personalNotes,
       addTask,
       updateTask,

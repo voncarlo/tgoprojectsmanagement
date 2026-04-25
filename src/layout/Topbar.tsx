@@ -21,6 +21,7 @@ import { FloatingChat } from "@/components/portal/FloatingChat";
 import { useTheme } from "@/hooks/use-theme";
 import { toast } from "sonner";
 import { MobileSidebar } from "./Sidebar";
+import { WorkspaceSwitcher } from "@/components/portal/WorkspaceSwitcher";
 
 const titles: Record<string, { title: string; subtitle: string }> = {
   "/dashboard": { title: "Dashboard", subtitle: "A snapshot of work happening across TGO." },
@@ -53,7 +54,7 @@ export const Topbar = () => {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const meta = titles[pathname] ?? titles["/dashboard"];
-  const { currentUser, signOut } = useAuth();
+  const { currentUser, signOut, activeWorkspace } = useAuth();
   const { notifications, unreadCount, markAllRead, clearNotifications } = useData();
   const { theme, toggleTheme } = useTheme();
   const team = teams.find((item) => item.id === currentUser.team)?.name ?? currentUser.team;
@@ -92,9 +93,15 @@ export const Topbar = () => {
         </Button>
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-base font-semibold tracking-tight text-foreground sm:text-lg">{meta.title}</h1>
-          <p className="hidden text-xs text-muted-foreground sm:block">{meta.subtitle}</p>
+          <p className="hidden text-xs text-muted-foreground sm:block">
+            {meta.subtitle}
+            {activeWorkspace ? ` Active workspace: ${activeWorkspace.name}.` : ""}
+          </p>
         </div>
-        <Badge variant="outline" className="hidden md:inline-flex">{team}</Badge>
+        <div className="hidden items-center gap-2 xl:flex">
+          <WorkspaceSwitcher />
+          <Badge variant="outline">{activeWorkspace?.shortName ?? team}</Badge>
+        </div>
 
         <div className="flex w-full items-center justify-end gap-1.5 sm:ml-auto sm:w-auto sm:gap-2">
           <button

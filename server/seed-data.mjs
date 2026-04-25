@@ -1,5 +1,17 @@
 export const seedUsers = [
-  { id: "u1", name: "Von Carlo Asinas", email: "von.asinas@tgocorp.com", role: "Super Admin", team: "projects", teams: ["dispatch", "recruitment", "sales", "clients", "projects", "payroll", "bookkeeping"], modules: ["dashboard", "tasks", "projects", "calendar", "workload", "reports", "documents", "notifications", "activity", "approvals", "automations", "dispatch", "recruitment", "sales", "payroll", "bookkeeping", "clients", "teams", "users", "admin", "settings"], status: "Active", initials: "VA", lastActive: "Just now" },
+  {
+    id: "u1",
+    name: "Von Carlo Asinas",
+    email: "von.asinas@tgocorp.com",
+    role: "Super Admin",
+    team: "projects",
+    teams: ["dispatch", "recruitment", "sales", "clients", "projects", "payroll", "bookkeeping", "businessAdmin"],
+    workspaceIds: ["dispatch", "recruitment", "sales", "clients", "projects", "payroll", "bookkeeping", "business-admin", "torero-global-outsourcing"],
+    modules: ["dashboard", "tasks", "projects", "calendar", "workload", "reports", "documents", "notifications", "activity", "approvals", "automations", "dispatch", "recruitment", "sales", "payroll", "bookkeeping", "clients", "teams", "users", "admin", "settings"],
+    status: "Active",
+    initials: "VA",
+    lastActive: "Just now",
+  },
 ];
 
 export const seedTasks = [
@@ -18,6 +30,7 @@ export const seedTasks = [
   { id: "t13", title: "Client onboarding playbook", assignee: "Von Carlo Asinas", team: "clients", priority: "Medium", status: "In Progress", due: "2025-04-23" },
   { id: "t14", title: "Compliance training rollout", assignee: "Alyanna Alonzo", team: "recruitment", priority: "High", status: "In Progress", due: "2025-04-29" },
   { id: "t15", title: "Monthly P&L close", assignee: "Ryan Lopez", team: "bookkeeping", priority: "High", status: "Not Started", due: "2025-05-03", project: "Books Cleanup Q1" },
+  { id: "t16", title: "Update internal policy handbook", assignee: "Maria Santos", team: "businessAdmin", priority: "Medium", status: "In Progress", due: "2025-04-27", project: "Policy Handbook Refresh" },
 ];
 
 export const seedProjects = [
@@ -28,4 +41,5 @@ export const seedProjects = [
   { id: "p5", name: "Payroll Compliance Audit", description: "Annual multi-state compliance audit.", team: "payroll", owner: "Alyanna Alonzo", status: "Planning", progress: 18, start: "2025-04-10", end: "2025-07-01", milestones: [{ name: "Scope", done: true }, { name: "Review", done: false }, { name: "Report", done: false }] },
   { id: "p6", name: "Client Onboarding Revamp", description: "New self-serve client onboarding flow.", team: "clients", owner: "Von Carlo Asinas", status: "Completed", progress: 100, start: "2024-11-01", end: "2025-02-28", milestones: [{ name: "Design", done: true }, { name: "Build", done: true }, { name: "Launch", done: true }] },
   { id: "p7", name: "Portal Rollout", description: "Cross-team rollout of TGO Projects Portal.", team: "projects", owner: "James Steffan", status: "Active", progress: 64, start: "2025-03-20", end: "2025-06-10", milestones: [{ name: "Build", done: true }, { name: "Pilot", done: false }, { name: "Launch", done: false }] },
+  { id: "p8", name: "Policy Handbook Refresh", description: "Refresh internal admin policies and handoff docs.", team: "businessAdmin", owner: "Maria Santos", status: "Active", progress: 50, start: "2025-04-01", end: "2025-05-20", milestones: [{ name: "Review procedures", done: true }, { name: "Collect sign-offs", done: false }, { name: "Publish final handbook", done: false }] },
 ];

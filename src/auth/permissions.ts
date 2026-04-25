@@ -10,6 +10,7 @@ export type Capability =
   // global
   | "system.configure"           // Super Admin only
   | "admin.access"               // Admin Panel
+  | "workspace.manage"
   | "users.manage"               // create/edit/delete users
   | "users.view"
   | "permissions.manage"         // edit permission matrix
@@ -41,7 +42,7 @@ export type Capability =
 /** Default capability set per role. Customizable later via permission matrix. */
 export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
   "Super Admin": [
-    "system.configure", "admin.access", "users.manage", "users.view",
+    "system.configure", "admin.access", "workspace.manage", "users.manage", "users.view",
     "permissions.manage", "automations.manage", "audit.view",
     "task.create", "task.edit.any", "task.edit.assigned", "task.delete", "task.assign",
     "project.create", "project.edit.any", "project.edit.team", "project.delete",
@@ -51,7 +52,7 @@ export const ROLE_CAPABILITIES: Record<Role, Capability[]> = {
     "data.export",
   ],
   Admin: [
-    "admin.access", "users.manage", "users.view",
+    "admin.access", "workspace.manage", "users.manage", "users.view",
     "permissions.manage", "automations.manage", "audit.view",
     "task.create", "task.edit.any", "task.edit.assigned", "task.delete", "task.assign",
     "project.create", "project.edit.any", "project.edit.team", "project.delete",
@@ -121,6 +122,7 @@ export const CAPABILITY_GROUPS: { group: string; caps: { id: Capability; label: 
     caps: [
       { id: "system.configure", label: "Configure system" },
       { id: "admin.access",     label: "Access admin panel" },
+      { id: "workspace.manage", label: "Manage workspaces" },
       { id: "permissions.manage", label: "Manage permissions" },
       { id: "automations.manage", label: "Manage automations" },
       { id: "audit.view",       label: "View audit logs" },

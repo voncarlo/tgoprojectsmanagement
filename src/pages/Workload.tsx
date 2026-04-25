@@ -3,27 +3,31 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { BarChart, Bar, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
-import { tasks as allTasks, users as allUsers, teams } from "@/data/mock";
+import { teams } from "@/data/mock";
 import { PageHeader } from "@/components/portal/PageHeader";
 import { StatTile } from "@/components/portal/StatTile";
 import { TeamIcon } from "@/components/portal/TeamIcon";
 import { useAuth } from "@/auth/AuthContext";
 import { Users, Activity, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useData } from "@/store/DataContext";
 
 const Workload = () => {
-  const { visibleTeams } = useAuth();
-  const visibleTasks = useMemo(() => allTasks.filter((t) => visibleTeams.includes(t.team)), [visibleTeams]);
+  const { visibleTeams, userList } = useAuth();
+  const { tasks: visibleTasks } = useData();
 
   const perUser = useMemo(() => {
-    return allUsers.map((u) => {
+    return userList
+      .filter((user) => user.status === "Active" && user.teams.some((teamId) => visibleTeams.includes(teamId)))
+      .map((u) => {
       const mine = visibleTasks.filter((t) => t.assignee === u.name && t.status !== "Completed" && t.status !== "Cancelled");
       const overdue = mine.filter((t) => new Date(t.due) < new Date()).length;
       const capacity = 8; // pretend
       const load = Math.min(150, Math.round((mine.length / capacity) * 100));
       return { user: u, count: mine.length, overdue, load };
-    }).sort((a, b) => b.load - a.load);
-  }, [visibleTasks]);
+    })
+      .sort((a, b) => b.load - a.load);
+  }, [userList, visibleTasks, visibleTeams]);
 
   const teamLoad = useMemo(() => teams.filter(t => visibleTeams.includes(t.id)).map((t) => ({
     team: t.name,

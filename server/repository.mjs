@@ -20,6 +20,7 @@ const mapUserRow = (row) => ({
   role: row.role,
   team: row.team,
   teams: parseJson(row.teams_json, []),
+  workspaceIds: parseJson(row.workspace_ids_json, []),
   modules: parseJson(row.modules_json, []),
   status: row.status,
   initials: row.initials,
@@ -70,14 +71,15 @@ const mapProjectRow = (row) => ({
 const upsertUser = async (user) => {
   await query(
     `INSERT INTO users (
-      id, name, email, role, team, teams_json, modules_json, status, initials, last_active, avatar_url, notification_settings_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      id, name, email, role, team, teams_json, workspace_ids_json, modules_json, status, initials, last_active, avatar_url, notification_settings_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON DUPLICATE KEY UPDATE
       name = VALUES(name),
       email = VALUES(email),
       role = VALUES(role),
       team = VALUES(team),
       teams_json = VALUES(teams_json),
+      workspace_ids_json = VALUES(workspace_ids_json),
       modules_json = VALUES(modules_json),
       status = VALUES(status),
       initials = VALUES(initials),
@@ -91,6 +93,7 @@ const upsertUser = async (user) => {
       user.role,
       user.team,
       JSON.stringify(user.teams ?? []),
+      JSON.stringify(user.workspaceIds ?? []),
       JSON.stringify(user.modules ?? []),
       user.status,
       user.initials,
@@ -110,12 +113,12 @@ const setUserPassword = async (userId, passwordValue) => {
   );
 };
 
-const saveAuthMeta = async (currentUserId) => {
+const saveAuthMeta = async (payload = {}) => {
   await query(
     `INSERT INTO state_snapshots (state_key, state_json)
      VALUES (?, ?)
      ON DUPLICATE KEY UPDATE state_json = VALUES(state_json)`,
-    [AUTH_META_KEY, JSON.stringify({ currentUserId })]
+    [AUTH_META_KEY, JSON.stringify(payload)]
   );
 };
 
@@ -307,10 +310,11 @@ export const getAuthState = async () => {
   );
 
   return {
-    version: 6,
+    version: 8,
     currentUserId: authMeta?.currentUserId ?? users[0]?.id ?? "",
     passwords,
     userList: users,
+    workspaces: authMeta?.workspaces ?? [],
   };
 };
 
@@ -335,7 +339,10 @@ export const saveAuthState = async (payload) => {
     await query("DELETE FROM user_credentials");
   }
 
-  await saveAuthMeta(payload.currentUserId ?? nextUsers[0]?.id ?? "");
+  await saveAuthMeta({
+    currentUserId: payload.currentUserId ?? nextUsers[0]?.id ?? "",
+    workspaces: payload.workspaces ?? [],
+  });
 };
 
 export const migrateLegacyAuthSnapshot = async () => {
@@ -362,6 +369,7 @@ export const migrateLegacyAuthSnapshot = async () => {
       AUTH_META_KEY,
       JSON.stringify({
         currentUserId: legacy.currentUserId ?? legacy.userList[0]?.id ?? "",
+        workspaces: legacy.workspaces ?? [],
         legacyMigratedAt: new Date().toISOString(),
       }),
     ]

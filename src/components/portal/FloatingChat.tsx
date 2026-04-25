@@ -16,9 +16,14 @@ interface FloatingChatProps {
 }
 
 export const FloatingChat = ({ open, onOpenChange }: FloatingChatProps) => {
-  const { currentUser, userList } = useAuth();
+  const { currentUser, userList, activeWorkspaceId } = useAuth();
   const { chats, sendChatMessage, updateChatMessage, removeChatMessage, markChatsRead } = useData();
-  const contacts = userList.filter((user) => user.id !== currentUser.id && user.status === "Active");
+  const contacts = userList.filter(
+    (user) =>
+      user.id !== currentUser.id &&
+      user.status === "Active" &&
+      (user.workspaceIds ?? []).includes(activeWorkspaceId)
+  );
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [message, setMessage] = useState("");

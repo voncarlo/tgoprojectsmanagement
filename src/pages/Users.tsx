@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/portal/PageHeader";
 import { ALL_ROLES, ROLE_MODULES } from "@/auth/permissions";
 import { RoleBadge } from "@/components/rbac/RoleBadge";
+import { COMPANY_WORKSPACE_ID } from "@/lib/workspaces";
 
 const ALL_MODULES: { id: ModuleKey; label: string }[] = [
   { id: "dashboard", label: "Dashboard" },
@@ -44,13 +45,14 @@ const emptyUser = (): User => ({
   status: "Active",
   initials: "··",
   lastActive: "Never",
+  workspaceIds: [],
 });
 
 const initialsOf = (name: string) =>
   name.trim().split(/\s+/).map((n) => n[0]).slice(0, 2).join("").toUpperCase() || "··";
 
 const Users = () => {
-  const { isAdmin, isSuperAdmin, userList, setUserList, currentUser, setPasswordForUser, resetPasswordForEmail, deleteUser } = useAuth();
+  const { isAdmin, isSuperAdmin, userList, setUserList, currentUser, setPasswordForUser, resetPasswordForEmail, deleteUser, workspaces } = useAuth();
   const [q, setQ] = useState("");
   const [teamFilter, setTeamFilter] = useState<string>("all");
   const [roleFilter, setRoleFilter] = useState<string>("all");
@@ -71,7 +73,7 @@ const Users = () => {
   );
 
   const upsert = (u: User) => {
-    const next = { ...u, initials: initialsOf(u.name) };
+    const next = { ...u, initials: initialsOf(u.name), workspaceIds: [...new Set(u.workspaceIds ?? [])] };
     if (next.teams.length === 0) next.teams = [next.team];
     if (!next.teams.includes(next.team)) next.team = next.teams[0];
     const exists = userList.some((x) => x.id === u.id);
@@ -174,6 +176,7 @@ const Users = () => {
                 <th className="text-left p-3 font-medium">User</th>
                 <th className="text-left p-3 font-medium">Role</th>
                 <th className="text-left p-3 font-medium">Departments</th>
+                <th className="text-left p-3 font-medium">Workspaces</th>
                 <th className="text-left p-3 font-medium">Status</th>
                 <th className="text-left p-3 font-medium">Last active</th>
                 <th className="text-right p-3 font-medium">Actions</th>
@@ -211,6 +214,19 @@ const Users = () => {
                     </div>
                   </td>
                   <td className="p-3">
+                    <div className="flex flex-wrap gap-1 max-w-[260px]">
+                      {(u.workspaceIds ?? []).map((workspaceId) => {
+                        const workspace = workspaces.find((item) => item.id === workspaceId);
+                        if (!workspace) return null;
+                        return (
+                          <Badge key={workspaceId} variant="outline" className="text-[10px]">
+                            {workspace.id === COMPANY_WORKSPACE_ID ? "Company-wide" : workspace.shortName}
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                  </td>
+                  <td className="p-3">
                     <div className="flex items-center gap-2">
                       <span className={cn("h-2 w-2 rounded-full", u.status === "Active" ? "bg-success" : "bg-muted-foreground")} />
                       <span className="text-xs">{u.status}</span>
@@ -238,7 +254,7 @@ const Users = () => {
                 </tr>
               ))}
               {filtered.length === 0 && (
-                <tr><td colSpan={6} className="p-8 text-center text-sm text-muted-foreground">No users match your filters.</td></tr>
+                <tr><td colSpan={7} className="p-8 text-center text-sm text-muted-foreground">No users match your filters.</td></tr>
               )}
             </tbody>
           </table>
@@ -313,6 +329,37 @@ const Users = () => {
                           />
                           <span className="h-2 w-2 rounded-full" style={{ background: `hsl(${t.color})` }} />
                           {t.name}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="space-y-2 md:col-span-2">
+                  <Label>Workspace access</Label>
+                  <div className="grid gap-2 rounded-lg border border-border p-3">
+                    {workspaces.map((workspace) => {
+                      const checked = (editing.workspaceIds ?? []).includes(workspace.id);
+                      return (
+                        <label key={workspace.id} className="flex items-start gap-3 rounded-lg border border-border/60 px-3 py-2 text-sm cursor-pointer">
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={(value) => {
+                              const nextWorkspaceIds = value
+                                ? [...new Set([...(editing.workspaceIds ?? []), workspace.id])]
+                                : (editing.workspaceIds ?? []).filter((id) => id !== workspace.id);
+                              setEditing({ ...editing, workspaceIds: nextWorkspaceIds });
+                            }}
+                          />
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{workspace.name}</span>
+                              {workspace.id === COMPANY_WORKSPACE_ID && (
+                                <Badge variant="outline" className="text-[10px]">Restricted</Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground">{workspace.description}</p>
+                          </div>
                         </label>
                       );
                     })}

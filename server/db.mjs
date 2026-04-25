@@ -73,6 +73,7 @@ export const ensureSchema = async () => {
 
   await ensureTableColumn("users", "avatar_url", "TEXT NULL");
   await ensureTableColumn("users", "notification_settings_json", "JSON NULL");
+  await ensureTableColumn("users", "workspace_ids_json", "JSON NULL");
   await ensureTableColumn("tasks", "assigned_by", "VARCHAR(255) NULL");
   await ensureTableColumn("tasks", "subtasks_json", "JSON NULL");
   await ensureTableColumn("projects", "co_owners_json", "JSON NULL");

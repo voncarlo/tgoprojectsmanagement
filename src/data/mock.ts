@@ -6,7 +6,8 @@ export type TeamId =
   | "clients"
   | "projects"
   | "payroll"
-  | "bookkeeping";
+  | "bookkeeping"
+  | "businessAdmin";
 export type AccountStatus = "Active" | "Inactive";
 export type ModuleKey =
   | "dashboard"
@@ -89,6 +90,7 @@ export interface User {
   lastActive?: string;
   avatarUrl?: string;
   notificationSettings?: NotificationSettings;
+  workspaceIds?: string[];
 }
 
 export interface NotificationSettings {
@@ -144,6 +146,7 @@ export interface Activity {
   action: string;
   target: string;
   time: string;
+  team?: TeamId;
 }
 
 export const teams: Team[] = [
@@ -154,6 +157,7 @@ export const teams: Team[] = [
   { id: "projects",    name: "Projects",    color: "210 85% 55%", lead: "James Steffan",    description: "Cross-team project delivery and oversight." },
   { id: "payroll",     name: "Payroll",     color: "340 75% 52%", lead: "Alyanna Alonzo",   description: "Compensation, benefits and compliance." },
   { id: "bookkeeping", name: "Bookkeeping", color: "172 70% 38%", lead: "Ryan Lopez",       description: "Financial records, reconciliation and reporting." },
+  { id: "businessAdmin", name: "Business Admin", color: "24 88% 56%", lead: "Maria Santos", description: "Administrative operations, coordination, and executive support." },
 ];
 
 const ALL_MODULES: ModuleKey[] = [
@@ -175,11 +179,22 @@ export const users: User[] = [
     email: "von.asinas@tgocorp.com",
     role: "Super Admin",
     team: "projects",
-    teams: ["dispatch","recruitment","sales","clients","projects","payroll","bookkeeping"],
+    teams: ["dispatch","recruitment","sales","clients","projects","payroll","bookkeeping","businessAdmin"],
     modules: ALL_MODULES,
     status: "Active",
     initials: "VA",
     lastActive: "Just now",
+    workspaceIds: [
+      "dispatch",
+      "recruitment",
+      "sales",
+      "clients",
+      "projects",
+      "payroll",
+      "bookkeeping",
+      "business-admin",
+      "torero-global-outsourcing",
+    ],
     notificationSettings: {
       enabled: true,
       digest: true,
@@ -198,6 +213,7 @@ export const projects: Project[] = [
   { id: "p5", name: "Payroll Compliance Audit",     description: "Annual multi-state compliance audit.",            team: "payroll",     owner: "Alyanna Alonzo",   coOwners: [], status: "Planning",  progress: 33,  start: "2025-04-10", end: "2025-07-01", milestones: [], subtasks: [{ id: "p5-s1", title: "Define audit scope", done: true }, { id: "p5-s2", title: "Review state thresholds", done: false }, { id: "p5-s3", title: "Prepare final report", done: false }] },
   { id: "p6", name: "Client Onboarding Revamp",     description: "New self-serve client onboarding flow.",          team: "clients",     owner: "Von Carlo Asinas", coOwners: ["Alyanna Alonzo"], status: "Completed", progress: 100, start: "2024-11-01", end: "2025-02-28", milestones: [], subtasks: [{ id: "p6-s1", title: "Finalize onboarding design", done: true }, { id: "p6-s2", title: "Build self-serve flow", done: true }, { id: "p6-s3", title: "Launch to clients", done: true }] },
   { id: "p7", name: "Portal Rollout",               description: "Cross-team rollout of TGO Projects Portal.",      team: "projects",    owner: "James Steffan",    coOwners: ["Von Carlo Asinas"], status: "Active",    progress: 33,  start: "2025-03-20", end: "2025-06-10", milestones: [], subtasks: [{ id: "p7-s1", title: "Complete portal pilot prep", done: true }, { id: "p7-s2", title: "Run pilot with internal teams", done: false }, { id: "p7-s3", title: "Launch company-wide", done: false }] },
+  { id: "p8", name: "Policy Handbook Refresh",      description: "Refresh internal admin policies and handoff docs.", team: "businessAdmin", owner: "Maria Santos", coOwners: ["Von Carlo Asinas"], status: "Active", progress: 50, start: "2025-04-01", end: "2025-05-20", milestones: [], subtasks: [{ id: "p8-s1", title: "Review outdated procedures", done: true }, { id: "p8-s2", title: "Collect department sign-offs", done: false }, { id: "p8-s3", title: "Publish final handbook", done: false }] },
 ];
 
 export const tasks: Task[] = [
@@ -216,15 +232,17 @@ export const tasks: Task[] = [
   { id: "t13", title: "Client onboarding playbook",      assignee: "Von Carlo Asinas", team: "clients",     priority: "Medium", status: "In Progress", due: "2025-04-23" },
   { id: "t14", title: "Compliance training rollout",     assignee: "Alyanna Alonzo",   team: "recruitment", priority: "High",   status: "In Progress", due: "2025-04-29" },
   { id: "t15", title: "Monthly P&L close",               assignee: "Ryan Lopez",       team: "bookkeeping", priority: "High",   status: "Not Started", due: "2025-05-03", project: "Books Cleanup Q1" },
+  { id: "t16", title: "Update internal policy handbook", assignee: "Maria Santos",     team: "businessAdmin", priority: "Medium", status: "In Progress", due: "2025-04-27", project: "Policy Handbook Refresh" },
 ];
 
 export const activity: Activity[] = [
-  { id: "a1", user: "Von Carlo Asinas", action: "completed task",  target: "Acme proposal draft",      time: "12m ago" },
-  { id: "a2", user: "Ryan Lopez",       action: "updated project", target: "Q2 Fleet Optimization",    time: "38m ago" },
-  { id: "a3", user: "Alyanna Alonzo",   action: "added comment on",target: "Senior backend interviews",time: "1h ago" },
-  { id: "a4", user: "James Steffan",    action: "promoted",        target: "Portal Rollout",           time: "2h ago" },
-  { id: "a5", user: "Alyanna Alonzo",   action: "completed task",  target: "Q1 payroll report",        time: "3h ago" },
-  { id: "a6", user: "Von Carlo Asinas", action: "created task",    target: "Quarterly client QBRs",    time: "5h ago" },
+  { id: "a1", user: "Von Carlo Asinas", action: "completed task",  target: "Acme proposal draft",      time: "12m ago", team: "sales" },
+  { id: "a2", user: "Ryan Lopez",       action: "updated project", target: "Q2 Fleet Optimization",    time: "38m ago", team: "dispatch" },
+  { id: "a3", user: "Alyanna Alonzo",   action: "added comment on",target: "Senior backend interviews",time: "1h ago", team: "recruitment" },
+  { id: "a4", user: "James Steffan",    action: "promoted",        target: "Portal Rollout",           time: "2h ago", team: "projects" },
+  { id: "a5", user: "Alyanna Alonzo",   action: "completed task",  target: "Q1 payroll report",        time: "3h ago", team: "payroll" },
+  { id: "a6", user: "Von Carlo Asinas", action: "created task",    target: "Quarterly client QBRs",    time: "5h ago", team: "clients" },
+  { id: "a7", user: "Maria Santos",     action: "updated document",target: "Policy handbook draft",    time: "6h ago", team: "businessAdmin" },
 ];
 
 export const teamWorkload = teams.map((t) => ({
@@ -315,6 +333,7 @@ export const approvals: Approval[] = [
   { id: "ap4", type: "Change", title: "Scope change: add SSO to Portal Rollout", requester: "James Steffan", team: "projects", status: "Approved", submitted: "2025-04-17" },
   { id: "ap5", type: "Report", title: "March payroll closing report", requester: "Alyanna Alonzo", team: "payroll", status: "Returned", submitted: "2025-04-16", notes: "Please attach the variance breakdown." },
   { id: "ap6", type: "Budget", title: "CRM license renewal", requester: "Von Carlo Asinas", team: "sales", status: "Pending", amount: 18900, submitted: "2025-04-21" },
+  { id: "ap7", type: "Change", title: "Admin handbook distribution update", requester: "Maria Santos", team: "businessAdmin", status: "Pending", submitted: "2025-04-22" },
 ];
 
 export interface DocumentFile {
@@ -338,6 +357,7 @@ export const documents: DocumentFile[] = [
   { id: "d5", name: "Portal Rollout — Architecture.pdf", category: "Project", size: "3.8 MB", owner: "James Steffan", team: "projects", updated: "5h ago", version: "v2.1" },
   { id: "d6", name: "Payroll SOP — Multi-state.pdf", category: "SOP", size: "920 KB", owner: "Alyanna Alonzo", team: "payroll", updated: "2 weeks ago", version: "v4" },
   { id: "d7", name: "Recruiter Interview Scorecard.docx", category: "Template", size: "48 KB", owner: "Alyanna Alonzo", team: "recruitment", updated: "4 days ago", version: "v2" },
+  { id: "d8", name: "Admin Policy Handbook Draft.docx", category: "SOP", size: "512 KB", owner: "Maria Santos", team: "businessAdmin", updated: "1 day ago", version: "v0.9" },
 ];
 
 export interface AutomationRule {
@@ -379,6 +399,7 @@ export const auditLog: AuditEntry[] = [
   { id: "al6", user: "Ryan Lopez", action: "Changed status of", target: "Books Cleanup Q1 → At Risk", category: "Project", team: "bookkeeping", time: "Yesterday" },
   { id: "al7", user: "System", action: "Automation triggered", target: "Notify manager on overdue task", category: "System", time: "2 days ago" },
   { id: "al8", user: "Alyanna Alonzo", action: "Returned approval", target: "March payroll closing report", category: "Approval", team: "payroll", time: "2 days ago" },
+  { id: "al9", user: "Maria Santos", action: "Updated", target: "Admin Policy Handbook Draft.docx", category: "File", team: "businessAdmin", time: "4h ago" },
 ];
 
 export interface CalendarEvent {
@@ -401,6 +422,7 @@ export const calendarEvents: CalendarEvent[] = [
   { id: "ev6", title: "Senior backend interview panel", type: "Meeting", date: "2025-04-24", team: "recruitment", createdById: "u1", createdByName: "Von Carlo Asinas" },
   { id: "ev7", title: "Portal Rollout pilot", type: "Event", date: "2025-05-02", team: "projects", createdById: "u1", createdByName: "Von Carlo Asinas" },
   { id: "ev8", title: "CRM renewal cutoff", type: "Deadline", date: "2025-04-29", team: "sales", createdById: "u1", createdByName: "Von Carlo Asinas" },
+  { id: "ev9", title: "Admin policy review", type: "Meeting", date: "2025-04-30", team: "businessAdmin", createdById: "u1", createdByName: "Von Carlo Asinas" },
 ];
 
 // AI insights for executive dashboard

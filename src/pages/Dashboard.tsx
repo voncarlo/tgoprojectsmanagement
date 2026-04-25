@@ -36,11 +36,11 @@ const Stat = ({ icon: Icon, label, value, delta, tone }: { icon: any; label: str
 );
 
 const Dashboard = () => {
-  const { visibleTeams, currentUser, isAdmin } = useAuth();
+  const { visibleTeams, currentUser, isAdmin, activeWorkspace } = useAuth();
   const { tasks, projects, notifications, approvals } = useData();
   const role = currentUser.role;
   const isExecutive = role === "Super Admin" || role === "Admin";
-  const primaryDepartment = teams.find((team) => team.id === currentUser.team)?.name ?? currentUser.team;
+  const primaryDepartment = activeWorkspace?.name ?? teams.find((team) => team.id === currentUser.team)?.name ?? currentUser.team;
   const myTasks = tasks.filter(t => visibleTeams.includes(t.team));
   const myProjects = projects.filter(p => visibleTeams.includes(p.team));
   const teamWorkload = teams

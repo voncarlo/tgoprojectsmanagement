@@ -13,9 +13,14 @@ import { toast } from "sonner";
 import { teams } from "@/data/mock";
 
 const Chat = () => {
-  const { currentUser, userList } = useAuth();
+  const { currentUser, userList, activeWorkspaceId } = useAuth();
   const { chats, sendChatMessage, updateChatMessage, removeChatMessage, markChatsRead } = useData();
-  const contacts = userList.filter((user) => user.id !== currentUser.id && user.status === "Active");
+  const contacts = userList.filter(
+    (user) =>
+      user.id !== currentUser.id &&
+      user.status === "Active" &&
+      (user.workspaceIds ?? []).includes(activeWorkspaceId)
+  );
   const [selectedId, setSelectedId] = useState(contacts[0]?.id ?? "");
   const [message, setMessage] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);

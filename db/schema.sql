@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS users (
   role ENUM('Super Admin', 'Admin', 'Manager', 'Staff') NOT NULL,
   team VARCHAR(64) NOT NULL,
   teams_json JSON NOT NULL,
+  workspace_ids_json JSON NULL,
   modules_json JSON NOT NULL,
   status ENUM('Active', 'Inactive') NOT NULL DEFAULT 'Active',
   initials VARCHAR(8) NOT NULL,
