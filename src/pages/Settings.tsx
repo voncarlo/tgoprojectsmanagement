@@ -72,6 +72,10 @@ const cropImageToSquare = (src: string, zoom: number, offsetX: number, offsetY: 
 
 const Settings = () => {
   const { currentUser, updateCurrentUser, isAdmin, isSuperAdmin, userList, updatePassword: savePassword, getTeamLeadNames } = useAuth();
+  const browserNotificationSupported = typeof window !== "undefined" && "Notification" in window;
+  const [browserPermission, setBrowserPermission] = useState<NotificationPermission>(
+    browserNotificationSupported ? Notification.permission : "denied"
+  );
 
   const [name, setName] = useState(currentUser.name);
   const [email, setEmail] = useState(currentUser.email);
@@ -97,7 +101,16 @@ const Settings = () => {
     () => Object.fromEntries(teams.map((t) => [t.id, true]))
   );
 
-  const [notif, setNotif] = useState(currentUser.notificationSettings ?? { enabled: true, digest: true, mentions: true, projects: true, deadlines: true });
+  const [notif, setNotif] = useState(currentUser.notificationSettings ?? {
+    enabled: true,
+    digest: true,
+    mentions: true,
+    projects: true,
+    deadlines: true,
+    popupPreviews: true,
+    notificationSound: false,
+    browserPush: false,
+  });
   const [twoFA, setTwoFA] = useState(false);
   const [compact, setCompact] = useState(false);
   const [weekly, setWeekly] = useState(true);
@@ -159,6 +172,23 @@ const Settings = () => {
     if (!result.ok) return toast.error(result.message ?? "Password update failed");
     setPwdOld(""); setPwdNew("");
     toast.success("Password updated");
+  };
+
+  const requestBrowserPermission = async () => {
+    if (!browserNotificationSupported) {
+      toast.error("Browser notifications are not supported here.");
+      return;
+    }
+    const result = await Notification.requestPermission();
+    setBrowserPermission(result);
+    if (result === "granted") {
+      const next = { ...notif, browserPush: true };
+      setNotif(next);
+      updateCurrentUser({ notificationSettings: next });
+      toast.success("Browser notifications enabled");
+      return;
+    }
+    toast.error(result === "denied" ? "Browser notification permission was denied." : "Browser notification permission was dismissed.");
   };
 
   return (
@@ -265,6 +295,9 @@ const Settings = () => {
             { k: "mentions", l: "Mentions", d: "When someone @mentions you" },
             { k: "projects", l: "Project updates", d: "Status changes on your projects" },
             { k: "deadlines", l: "Deadline reminders", d: "Upcoming task and project due dates" },
+            { k: "popupPreviews", l: "Popup previews", d: "Temporary lower-right previews for new notifications" },
+            { k: "notificationSound", l: "Notification sound", d: "Play a short sound when a popup preview appears" },
+            { k: "browserPush", l: "Browser notifications", d: "Show browser alerts when this tab is inactive" },
           ].map((n, i, arr) => (
             <div key={n.k}>
               <div className="flex items-center justify-between py-3">
@@ -275,6 +308,10 @@ const Settings = () => {
                 <Switch
                   checked={(notif as any)[n.k]}
                   onCheckedChange={(v) => {
+                    if (n.k === "browserPush" && v && (!browserNotificationSupported || browserPermission !== "granted")) {
+                      void requestBrowserPermission();
+                      return;
+                    }
                     const next = { ...notif, [n.k]: v };
                     setNotif(next);
                     updateCurrentUser({ notificationSettings: next });
@@ -282,6 +319,16 @@ const Settings = () => {
                   }}
                 />
               </div>
+              {n.k === "browserPush" && (
+                <div className="pb-3 text-xs text-muted-foreground">
+                  Permission: {browserNotificationSupported ? browserPermission : "unsupported"}
+                  {browserNotificationSupported && browserPermission !== "granted" && (
+                    <Button type="button" variant="outline" size="sm" className="ml-3 h-7" onClick={() => void requestBrowserPermission()}>
+                      Allow browser alerts
+                    </Button>
+                  )}
+                </div>
+              )}
               {i < arr.length - 1 && <Separator />}
             </div>
           ))}

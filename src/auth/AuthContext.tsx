@@ -104,6 +104,9 @@ const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   mentions: true,
   projects: true,
   deadlines: true,
+  popupPreviews: true,
+  notificationSound: false,
+  browserPush: false,
 };
 
 const ALL_TEAMS: TeamId[] = ["dispatch", "recruitment", "sales", "clients", "projects", "payroll", "bookkeeping", "businessAdmin"];

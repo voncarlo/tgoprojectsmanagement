@@ -99,6 +99,9 @@ export interface NotificationSettings {
   mentions: boolean;
   projects: boolean;
   deadlines: boolean;
+  popupPreviews?: boolean;
+  notificationSound?: boolean;
+  browserPush?: boolean;
 }
 
 export interface Task {
@@ -191,6 +194,9 @@ export const users: User[] = [
       mentions: true,
       projects: true,
       deadlines: true,
+      popupPreviews: true,
+      notificationSound: false,
+      browserPush: false,
     },
   },
 ];
