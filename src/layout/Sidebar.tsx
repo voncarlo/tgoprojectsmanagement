@@ -194,7 +194,9 @@ const SidebarInner = ({ collapsed, setCollapsed, onNavigate, hideCollapseToggle 
             <WorkspaceSwitcher compact className="border-sidebar-border bg-sidebar-accent/30 text-sidebar-foreground hover:bg-sidebar-accent" />
             {activeWorkspace && (
               <p className="mt-2 text-[11px] leading-relaxed text-sidebar-foreground/60">
-                {activeWorkspace.isCompanyWide ? "Viewing company-wide data and updates." : `Scoped to ${activeWorkspace.shortName}.`}
+                {activeWorkspace.isCompanyWide
+                  ? `Viewing ${activeWorkspace.name} data and updates.`
+                  : `Scoped to ${activeWorkspace.name}.`}
               </p>
             )}
           </div>
